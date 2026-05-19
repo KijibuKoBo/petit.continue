@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Petit.Continue — Handcrafted Miniature Furniture by Matsunaga Kobo, Shizuoka Japan</title>
+<meta name="description" content="Exquisite 1/3 scale miniature furniture handcrafted by master artisans in Shizuoka, Japan. For 40–60cm dolls. Each piece is a work of art.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&family=Jost:wght@300;400;500&family=Noto+Serif+JP:wght@300;500;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --ivory: #FAF7F2;
+  --cream: #F3EDE3;
+  --warm-white: #FFFDF9;
+  --charcoal: #1A1715;
+  --ink: #2C2825;
+  --muted: #6B6560;
+  --gold: #B8986A;
+  --gold-light: #D4BE91;
+  --gold-dark: #8C6D3F;
+  --rose: #C4A08A;
+  --blush: #E8D5C8;
+  --sage: #8B9A7E;
+  --serif: 'Cormorant Garamond', 'Noto Serif JP', serif;
+  --sans: 'Jost', sans-serif;
+}
+
+html { scroll-behavior: smooth; font-size: 16px; }
+
+body {
+  font-family: var(--sans);
+  color: var(--ink);
+  background: var(--ivory);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Utility ── */
+.container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+
+/* ── Grain overlay ── */
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── Navigation ── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0;
+  z-index: 100;
+  background: rgba(250, 247, 242, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(184, 152, 106, 0.15);
+  transition: all 0.4s ease;
+}
+nav.scrolled { box-shadow: 0 2px 40px rgba(0,0,0,0.06); }
+.nav-inner {
+  max-width: 1200px; margin: 0 auto; padding: 0 24px;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 64px;
+}
+.nav-brand {
+  font-family: var(--serif);
+  font-size: 1.3rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--charcoal);
+  text-decoration: none;
+}
+.nav-brand span { color: var(--gold); }
+.nav-links { display: flex; gap: 32px; list-style: none; }
+.nav-links a {
+  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.3s;
+}
+.nav-links a:hover { color: var(--gold-dark); }
+.nav-cta {
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 10px 24px;
+  background: var(--charcoal);
+  color: var(--cream);
+  text-decoration: none;
+  transition: all 0.3s;
+}
+.nav-cta:hover { background: var(--gold-dark); }
+.nav-mobile-toggle { display: none; background: none; border: none; cursor: pointer; }
+
+/* ── Hero ── */
+.hero {
+  min-height: 100vh;
+  display: flex; flex-direction: column;
+  justify-content: center; align-items: center;
+  text-align: center;
+  padding: 120px 24px 80px;
+  position: relative;
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(184,152,106,0.07) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 30%, rgba(196,160,138,0.06) 0%, transparent 50%),
+    var(--ivory);
+}
+.hero-tagline {
+  font-family: var(--sans);
+  font-size: 0.7rem;
+  font-weight: 400;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 32px;
+  opacity: 0; animation: fadeUp 1s 0.2s forwards;
+}
+.hero-title {
+  font-family: var(--serif);
+  font-size: clamp(2.8rem, 7vw, 5.5rem);
+  font-weight: 300;
+  line-height: 1.1;
+  color: var(--charcoal);
+  margin-bottom: 12px;
+  opacity: 0; animation: fadeUp 1s 0.4s forwards;
+}
+.hero-title em {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--gold-dark);
+}
+.hero-sub {
+  font-family: var(--serif);
+  font-size: clamp(1rem, 2.5vw, 1.35rem);
+  font-weight: 300;
+  font-style: italic;
+  color: var(--muted);
+  margin-bottom: 48px;
+  max-width: 600px;
+  opacity: 0; animation: fadeUp 1s 0.6s forwards;
+}
+.hero-scroll {
+  opacity: 0; animation: fadeUp 1s 0.8s forwards;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  color: var(--gold);
+  font-size: 0.65rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+}
+.hero-scroll-line {
+  width: 1px; height: 48px;
+  background: linear-gradient(to bottom, var(--gold), transparent);
+  animation: scrollPulse 2s infinite;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes scrollPulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+/* ── Divider ── */
+.divider {
+  display: flex; align-items: center; justify-content: center;
+  gap: 20px; padding: 48px 0;
+}
+.divider-line { width: 60px; height: 1px; background: var(--gold-light); }
+.divider-diamond {
+  width: 6px; height: 6px;
+  background: var(--gold);
+  transform: rotate(45deg);
+}
+
+/* ── Philosophy ── */
+.philosophy {
+  padding: 80px 24px;
+  text-align: center;
+  background: var(--warm-white);
+}
+.philosophy-quote {
+  font-family: var(--serif);
+  font-size: clamp(1.3rem, 3vw, 2rem);
+  font-weight: 300;
+  font-style: italic;
+  line-height: 1.7;
+  color: var(--charcoal);
+  max-width: 750px;
+  margin: 0 auto 32px;
+}
+.philosophy-quote::before { content: '"'; color: var(--gold-light); font-size: 1.4em; }
+.philosophy-quote::after { content: '"'; color: var(--gold-light); font-size: 1.4em; }
+.philosophy-attr {
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ── Story ── */
+.story {
+  padding: 100px 24px;
+  max-width: 820px;
+  margin: 0 auto;
+}
+.section-label {
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 24px;
+}
+.section-heading {
+  font-family: var(--serif);
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  font-weight: 400;
+  line-height: 1.3;
+  color: var(--charcoal);
+  margin-bottom: 40px;
+}
+.story-text {
+  font-size: 1rem;
+  line-height: 2;
+  color: var(--muted);
+  margin-bottom: 24px;
+}
+.story-text strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* ── Features Grid ── */
+.features {
+  padding: 100px 24px;
+  background:
+    linear-gradient(135deg, var(--cream) 0%, var(--warm-white) 50%, var(--cream) 100%);
+}
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 48px;
+  max-width: 1000px;
+  margin: 48px auto 0;
+}
+.feature-card {
+  text-align: center;
+  padding: 48px 32px;
+  background: rgba(255,253,249,0.7);
+  border: 1px solid rgba(184,152,106,0.12);
+  transition: all 0.4s;
+}
+.feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.04);
+  border-color: rgba(184,152,106,0.3);
+}
+.feature-icon {
+  font-size: 2rem;
+  margin-bottom: 24px;
+  display: block;
+}
+.feature-title {
+  font-family: var(--serif);
+  font-size: 1.2rem;
+  font-weight: 500;
+  color: var(--charcoal);
+  margin-bottom: 16px;
+}
+.feature-desc {
+  font-size: 0.88rem;
+  line-height: 1.8;
+  color: var(--muted);
+}
+
+/* ── Collection ── */
+.collection { padding: 100px 24px; }
+.collection-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 32px;
+  max-width: 1000px;
+  margin: 48px auto 0;
+}
+.collection-item {
+  position: relative;
+  background: var(--cream);
+  padding: 48px 40px;
+  border: 1px solid rgba(184,152,106,0.1);
+  transition: all 0.4s;
+  overflow: hidden;
+}
+.collection-item::before {
+  content: '';
+  position: absolute; top: 0; left: 0;
+  width: 3px; height: 0;
+  background: var(--gold);
+  transition: height 0.6s ease;
+}
+.collection-item:hover::before { height: 100%; }
+.collection-item:hover { box-shadow: 0 16px 48px rgba(0,0,0,0.05); }
+.item-category {
+  font-size: 0.6rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 12px;
+}
+.item-name {
+  font-family: var(--serif);
+  font-size: 1.4rem;
+  font-weight: 500;
+  color: var(--charcoal);
+  margin-bottom: 12px;
+}
+.item-desc {
+  font-size: 0.88rem;
+  line-height: 1.8;
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+.item-detail {
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  color: var(--rose);
+}
+
+/* ── Process ── */
+.process {
+  padding: 100px 24px;
+  background: var(--charcoal);
+  color: var(--cream);
+}
+.process .section-label { color: var(--gold-light); }
+.process .section-heading { color: var(--cream); }
+.process-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 32px;
+  max-width: 1000px;
+  margin: 48px auto 0;
+  counter-reset: step;
+}
+.process-step {
+  text-align: center;
+  padding: 32px 20px;
+  position: relative;
+  counter-increment: step;
+}
+.process-step::before {
+  content: counter(step, decimal-leading-zero);
+  font-family: var(--serif);
+  font-size: 2.5rem;
+  font-weight: 300;
+  color: rgba(184,152,106,0.25);
+  display: block;
+  margin-bottom: 20px;
+}
+.step-title {
+  font-family: var(--serif);
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--gold-light);
+  margin-bottom: 12px;
+}
+.step-desc {
+  font-size: 0.85rem;
+  line-height: 1.8;
+  color: rgba(243, 237, 227, 0.6);
+}
+
+/* ── Testimonial ── */
+.testimonial {
+  padding: 100px 24px;
+  background: var(--warm-white);
+  text-align: center;
+}
+.testimonial-text {
+  font-family: var(--serif);
+  font-size: clamp(1.15rem, 2.5vw, 1.6rem);
+  font-weight: 300;
+  font-style: italic;
+  line-height: 1.8;
+  color: var(--charcoal);
+  max-width: 700px;
+  margin: 0 auto 32px;
+}
+.testimonial-author {
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ── CTA ── */
+.cta {
+  padding: 120px 24px;
+  text-align: center;
+  position: relative;
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(184,152,106,0.08) 0%, transparent 70%),
+    var(--ivory);
+}
+.cta-heading {
+  font-family: var(--serif);
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 300;
+  line-height: 1.2;
+  color: var(--charcoal);
+  margin-bottom: 24px;
+}
+.cta-heading em { font-style: italic; color: var(--gold-dark); }
+.cta-sub {
+  font-size: 1rem;
+  color: var(--muted);
+  margin-bottom: 48px;
+  max-width: 500px;
+  margin-left: auto; margin-right: auto;
+  line-height: 1.8;
+}
+.cta-btn {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  padding: 18px 56px;
+  background: var(--charcoal);
+  color: var(--cream);
+  text-decoration: none;
+  transition: all 0.4s;
+  position: relative;
+  overflow: hidden;
+}
+.cta-btn::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: var(--gold-dark);
+  transform: translateX(-100%);
+  transition: transform 0.5s ease;
+}
+.cta-btn:hover::after { transform: translateX(0); }
+.cta-btn span { position: relative; z-index: 1; }
+.cta-secondary {
+  display: block;
+  margin-top: 20px;
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.3s;
+}
+.cta-secondary:hover { color: var(--gold-dark); }
+
+/* ── Footer ── */
+footer {
+  padding: 60px 24px;
+  border-top: 1px solid rgba(184,152,106,0.15);
+  text-align: center;
+}
+.footer-brand {
+  font-family: var(--serif);
+  font-size: 1.1rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--charcoal);
+  margin-bottom: 16px;
+}
+.footer-info {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 2;
+  margin-bottom: 24px;
+}
+.footer-links { display: flex; justify-content: center; gap: 32px; flex-wrap: wrap; }
+.footer-links a {
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.3s;
+}
+.footer-links a:hover { color: var(--gold-dark); }
+.footer-copy {
+  margin-top: 40px;
+  font-size: 0.7rem;
+  color: rgba(107, 101, 96, 0.5);
+}
+
+/* ── Scroll Animations ── */
+.reveal {
+  opacity: 0;
+  transform: translateY(32px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .nav-links { display: none; }
+  .nav-mobile-toggle { display: block; }
+  .features-grid { grid-template-columns: 1fr; gap: 24px; }
+  .collection-grid { grid-template-columns: 1fr; }
+  .process-steps { grid-template-columns: repeat(2, 1fr); gap: 24px; }
+  .hero { min-height: 90vh; padding: 100px 20px 60px; }
+  .story { padding: 60px 20px; }
+  .features, .collection, .process, .testimonial, .cta { padding: 60px 20px; }
+  .feature-card { padding: 32px 24px; }
+  .collection-item { padding: 32px 28px; }
+}
+@media (max-width: 480px) {
+  .process-steps { grid-template-columns: 1fr; }
+  .nav-cta { padding: 8px 16px; font-size: 0.65rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav id="nav">
+  <div class="nav-inner">
+    <a href="#" class="nav-brand">Petit<span>.</span>Continue</a>
+    <ul class="nav-links">
+      <li><a href="#story">Story</a></li>
+      <li><a href="#collection">Collection</a></li>
+      <li><a href="#process">Craft</a></li>
+    </ul>
+    <a href="https://www.etsy.com/" class="nav-cta" target="_blank" rel="noopener">Visit Etsy Shop →</a>
+    <button class="nav-mobile-toggle" aria-label="Menu">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <p class="hero-tagline">Handcrafted in Shizuoka, Japan · Since 1968</p>
+  <h1 class="hero-title">
+    Where <em>Artistry</em><br>Meets Miniature
+  </h1>
+  <p class="hero-sub">
+    Exquisite 1/3 scale furniture, handcrafted by master artisans<br>
+    for the world's most discerning doll collectors.
+  </p>
+  <div class="hero-scroll">
+    <div class="hero-scroll-line"></div>
+    Discover
+  </div>
+</section>
+
+<!-- Philosophy -->
+<section class="philosophy">
+  <div class="divider">
+    <div class="divider-line"></div>
+    <div class="divider-diamond"></div>
+    <div class="divider-line"></div>
+  </div>
+  <blockquote class="philosophy-quote reveal">
+    Beautiful furniture creates beautiful spaces.<br>
+    We craft furniture that is loved and brings joy.
+  </blockquote>
+  <p class="philosophy-attr reveal">— Matsunaga Kobo Philosophy</p>
+</section>
+
+<!-- Story -->
+<section class="story" id="story">
+  <p class="section-label reveal">Our Story</p>
+  <h2 class="section-heading reveal">
+    From Full-Scale Elegance<br>to Miniature Masterpieces
+  </h2>
+  <p class="story-text reveal">
+    For over five decades, <strong>Matsunaga Kobo</strong> has crafted antique-style furniture in Shizuoka — Japan's historic center of fine woodworking. Our full-size brand, CONTINUE, is beloved for its flowing curves, hand-carved details, and signature cabriole legs.
+  </p>
+  <p class="story-text reveal">
+    In 2023, we channeled that same passion into <strong>Petit.Continue</strong> — faithfully recreating every sculpted curve, every hand-carved flourish, at 1/3 scale. These are not toys. They are <strong>miniature works of furniture art</strong>, made with the same techniques, the same woods, and the same hands that build our full-size pieces.
+  </p>
+  <p class="story-text reveal">
+    Each piece fits 40–60 cm dolls, from SD to DD and beyond — transforming your doll's world into an atmosphere of timeless elegance.
+  </p>
+</section>
+
+<!-- Features -->
+<section class="features">
+  <div style="text-align:center">
+    <p class="section-label reveal">Why Collectors Choose Us</p>
+    <h2 class="section-heading reveal">The Petit.Continue Difference</h2>
+  </div>
+  <div class="features-grid">
+    <div class="feature-card reveal">
+      <span class="feature-icon">✦</span>
+      <h3 class="feature-title">Real Furniture Craft</h3>
+      <p class="feature-desc">Built with the same joinery, carving, and finishing techniques as our full-size CONTINUE line. Not a miniature imitation — a miniature original.</p>
+    </div>
+    <div class="feature-card reveal">
+      <span class="feature-icon">◈</span>
+      <h3 class="feature-title">Artisan Handmade</h3>
+      <p class="feature-desc">Every cabriole leg is hand-carved. Every curve is sculpted by seasoned craftsmen. No two pieces are ever identical — each carries the warmth of the human hand.</p>
+    </div>
+    <div class="feature-card reveal">
+      <span class="feature-icon">❖</span>
+      <h3 class="feature-title">Made in Shizuoka</h3>
+      <p class="feature-desc">Shizuoka has been the heart of Japanese woodcraft for centuries. Our workshop carries forward this living tradition with every piece we create.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Collection -->
+<section class="collection" id="collection">
+  <div style="text-align:center">
+    <p class="section-label reveal">The Collection</p>
+    <h2 class="section-heading reveal">Signature Pieces</h2>
+  </div>
+  <div class="collection-grid">
+    <div class="collection-item reveal">
+      <p class="item-category">Iconic</p>
+      <h3 class="item-name">Petit Couch</h3>
+      <p class="item-desc">Our most beloved piece. The graceful backrest curve and delicate carvings create an undeniable presence. Available in 9 cushion colors to match any aesthetic.</p>
+      <p class="item-detail">Best Seller · Hand-carved cabriole legs · 9 fabric options</p>
+    </div>
+    <div class="collection-item reveal">
+      <p class="item-category">Elegant</p>
+      <h3 class="item-name">Petit Chair</h3>
+      <p class="item-desc">Sculptural curves that make your doll look breathtaking. Individually upholstered with tack detailing on the reverse — every angle is considered.</p>
+      <p class="item-detail">Collector Favorite · Tack-stud detailing · Multiple colors</p>
+    </div>
+    <div class="collection-item reveal">
+      <p class="item-category">Statement</p>
+      <h3 class="item-name">Petit Wardrobe</h3>
+      <p class="item-desc">A functional masterpiece for displaying and storing doll garments. Carved door panels and interior detailing that reward close inspection.</p>
+      <p class="item-detail">Functional Art · Full interior finish · Carved doors</p>
+    </div>
+    <div class="collection-item reveal">
+      <p class="item-category">New</p>
+      <h3 class="item-name">Dresser Petit Arole</h3>
+      <p class="item-desc">The newest addition to the collection. An elegant vanity dresser with flowing lines and mirror, capturing the essence of European antique style.</p>
+      <p class="item-detail">2026 Release · Limited Production · Mirror included</p>
+    </div>
+  </div>
+</section>
+
+<!-- Process -->
+<section class="process" id="process">
+  <div style="text-align:center">
+    <p class="section-label reveal">The Craft</p>
+    <h2 class="section-heading reveal">How Each Piece Comes to Life</h2>
+  </div>
+  <div class="process-steps">
+    <div class="process-step reveal">
+      <h3 class="step-title">Design</h3>
+      <p class="step-desc">Every detail from our full-size CONTINUE line is redrawn at 1/3 scale — preserving proportions that feel right.</p>
+    </div>
+    <div class="process-step reveal">
+      <h3 class="step-title">Woodwork</h3>
+      <p class="step-desc">Solid wood is shaped and carved by hand. Cabriole legs are sculpted to their absolute thinnest — a true test of mastery.</p>
+    </div>
+    <div class="process-step reveal">
+      <h3 class="step-title">Finishing</h3>
+      <p class="step-desc">Multiple coats of lacquer are applied and polished. Upholstery is hand-stitched. Every surface is refined to a flawless touch.</p>
+    </div>
+    <div class="process-step reveal">
+      <h3 class="step-title">Delivery</h3>
+      <p class="step-desc">Carefully wrapped and cushioned for international shipping. Each piece arrives gallery-ready, directly from our Shizuoka workshop to you.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Testimonial -->
+<section class="testimonial">
+  <div class="divider">
+    <div class="divider-line"></div>
+    <div class="divider-diamond"></div>
+    <div class="divider-line"></div>
+  </div>
+  <p class="testimonial-text reveal">
+    The level of detail is extraordinary. You can feel the craftsmanship the moment you hold it — this is real furniture, just smaller. Nothing else on the market compares.
+  </p>
+  <p class="testimonial-author reveal">— Dolpa Collector, Tokyo</p>
+</section>
+
+<!-- CTA -->
+<section class="cta">
+  <h2 class="cta-heading reveal">
+    Bring <em>Elegance</em><br>to Your Doll's World
+  </h2>
+  <p class="cta-sub reveal">
+    Each piece is handcrafted to order by our artisans in Shizuoka.<br>
+    Worldwide shipping available.
+  </p>
+  <a href="https://www.etsy.com/" class="cta-btn reveal" target="_blank" rel="noopener">
+    <span>Shop on Etsy →</span>
+  </a>
+  <a href="https://www.petit-de-continue.com/" class="cta-secondary reveal" target="_blank" rel="noopener">
+    Or visit our official site →
+  </a>
+</section>
+
+<!-- Footer -->
+<footer>
+  <p class="footer-brand">Petit.Continue</p>
+  <p class="footer-info">
+    by Matsunaga Kobo Co., Ltd. · Shizuoka City, Japan<br>
+    Handcrafting fine furniture since 1968
+  </p>
+  <div class="footer-links">
+    <a href="https://www.etsy.com/" target="_blank" rel="noopener">Etsy Shop</a>
+    <a href="https://www.petit-de-continue.com/" target="_blank" rel="noopener">Official Site</a>
+    <a href="https://www.instagram.com/" target="_blank" rel="noopener">Instagram</a>
+    <a href="https://twitter.com/" target="_blank" rel="noopener">X (Twitter)</a>
+  </div>
+  <p class="footer-copy">© 2026 Matsunaga Kobo Co., Ltd. All rights reserved.</p>
+</footer>
+
+<script>
+// Nav scroll effect
+const nav = document.getElementById('nav');
+window.addEventListener('scroll', () => {
+  nav.classList.toggle('scrolled', window.scrollY > 40);
+});
+
+// Scroll reveal
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// Mobile nav toggle
+const toggle = document.querySelector('.nav-mobile-toggle');
+const links = document.querySelector('.nav-links');
+let mobileOpen = false;
+toggle.addEventListener('click', () => {
+  mobileOpen = !mobileOpen;
+  if (mobileOpen) {
+    links.style.display = 'flex';
+    links.style.flexDirection = 'column';
+    links.style.position = 'absolute';
+    links.style.top = '64px';
+    links.style.left = '0';
+    links.style.right = '0';
+    links.style.background = 'rgba(250,247,242,0.98)';
+    links.style.padding = '24px';
+    links.style.gap = '20px';
+    links.style.borderBottom = '1px solid rgba(184,152,106,0.15)';
+  } else {
+    links.style.display = '';
+    links.style.flexDirection = '';
+    links.style.position = '';
+    links.style.top = '';
+    links.style.left = '';
+    links.style.right = '';
+    links.style.background = '';
+    links.style.padding = '';
+    links.style.gap = '';
+    links.style.borderBottom = '';
+  }
+});
+</script>
+
+</body>
+</html>

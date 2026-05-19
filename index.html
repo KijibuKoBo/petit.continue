@@ -23,7 +23,7 @@
   --gold-dark: #8C6D3F;
   --rose: #C4A08A;
   --blush: #E8D5C8;
-  --sage: #8B9A7E;
+  --photo-bg: #EDE8E0;
   --serif: 'Cormorant Garamond', 'Noto Serif JP', serif;
   --sans: 'Jost', sans-serif;
 }
@@ -38,11 +38,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── Utility ── */
-.container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
-.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
-
-/* ── Grain overlay ── */
 body::after {
   content: '';
   position: fixed; inset: 0;
@@ -53,50 +48,32 @@ body::after {
 
 /* ── Navigation ── */
 nav {
-  position: fixed; top: 0; left: 0; right: 0;
-  z-index: 100;
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
   background: rgba(250, 247, 242, 0.92);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid rgba(184, 152, 106, 0.15);
   transition: all 0.4s ease;
 }
 nav.scrolled { box-shadow: 0 2px 40px rgba(0,0,0,0.06); }
 .nav-inner {
   max-width: 1200px; margin: 0 auto; padding: 0 24px;
-  display: flex; align-items: center; justify-content: space-between;
-  height: 64px;
+  display: flex; align-items: center; justify-content: space-between; height: 64px;
 }
 .nav-brand {
-  font-family: var(--serif);
-  font-size: 1.3rem;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  color: var(--charcoal);
-  text-decoration: none;
+  font-family: var(--serif); font-size: 1.3rem; font-weight: 500;
+  letter-spacing: 0.08em; color: var(--charcoal); text-decoration: none;
 }
 .nav-brand span { color: var(--gold); }
 .nav-links { display: flex; gap: 32px; list-style: none; }
 .nav-links a {
-  font-size: 0.78rem;
-  font-weight: 400;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--muted);
-  text-decoration: none;
-  transition: color 0.3s;
+  font-size: 0.78rem; font-weight: 400; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--muted); text-decoration: none; transition: color 0.3s;
 }
 .nav-links a:hover { color: var(--gold-dark); }
 .nav-cta {
-  font-size: 0.72rem;
-  font-weight: 500;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  padding: 10px 24px;
-  background: var(--charcoal);
-  color: var(--cream);
-  text-decoration: none;
-  transition: all 0.3s;
+  font-size: 0.72rem; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase;
+  padding: 10px 24px; background: var(--charcoal); color: var(--cream);
+  text-decoration: none; transition: all 0.3s;
 }
 .nav-cta:hover { background: var(--gold-dark); }
 .nav-mobile-toggle { display: none; background: none; border: none; cursor: pointer; }
@@ -104,72 +81,63 @@ nav.scrolled { box-shadow: 0 2px 40px rgba(0,0,0,0.06); }
 /* ── Hero ── */
 .hero {
   min-height: 100vh;
-  display: flex; flex-direction: column;
-  justify-content: center; align-items: center;
-  text-align: center;
-  padding: 120px 24px 80px;
-  position: relative;
-  background:
-    radial-gradient(ellipse at 20% 50%, rgba(184,152,106,0.07) 0%, transparent 60%),
-    radial-gradient(ellipse at 80% 30%, rgba(196,160,138,0.06) 0%, transparent 50%),
-    var(--ivory);
+  display: grid; grid-template-columns: 1fr 1fr;
+  align-items: center; padding-top: 64px;
+  background: var(--ivory); overflow: hidden;
 }
+.hero-content { padding: 60px 48px 60px 80px; z-index: 2; }
 .hero-tagline {
-  font-family: var(--sans);
-  font-size: 0.7rem;
-  font-weight: 400;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  color: var(--gold);
-  margin-bottom: 32px;
+  font-size: 0.7rem; font-weight: 400; letter-spacing: 0.3em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 32px;
   opacity: 0; animation: fadeUp 1s 0.2s forwards;
 }
 .hero-title {
-  font-family: var(--serif);
-  font-size: clamp(2.8rem, 7vw, 5.5rem);
-  font-weight: 300;
-  line-height: 1.1;
-  color: var(--charcoal);
-  margin-bottom: 12px;
+  font-family: var(--serif); font-size: clamp(2.4rem, 4.5vw, 4.2rem);
+  font-weight: 300; line-height: 1.15; color: var(--charcoal); margin-bottom: 24px;
   opacity: 0; animation: fadeUp 1s 0.4s forwards;
 }
-.hero-title em {
-  font-style: italic;
-  font-weight: 400;
-  color: var(--gold-dark);
-}
+.hero-title em { font-style: italic; font-weight: 400; color: var(--gold-dark); }
 .hero-sub {
-  font-family: var(--serif);
-  font-size: clamp(1rem, 2.5vw, 1.35rem);
-  font-weight: 300;
-  font-style: italic;
-  color: var(--muted);
-  margin-bottom: 48px;
-  max-width: 600px;
+  font-family: var(--serif); font-size: clamp(0.95rem, 1.8vw, 1.15rem);
+  font-weight: 300; font-style: italic; color: var(--muted);
+  margin-bottom: 40px; max-width: 440px; line-height: 1.8;
   opacity: 0; animation: fadeUp 1s 0.6s forwards;
 }
-.hero-scroll {
+.hero-cta {
+  display: inline-block; font-size: 0.75rem; font-weight: 500;
+  letter-spacing: 0.2em; text-transform: uppercase; padding: 16px 44px;
+  background: var(--charcoal); color: var(--cream); text-decoration: none;
+  transition: all 0.4s; position: relative; overflow: hidden;
   opacity: 0; animation: fadeUp 1s 0.8s forwards;
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
-  color: var(--gold);
-  font-size: 0.65rem;
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
 }
-.hero-scroll-line {
-  width: 1px; height: 48px;
-  background: linear-gradient(to bottom, var(--gold), transparent);
-  animation: scrollPulse 2s infinite;
+.hero-cta::after {
+  content: ''; position: absolute; inset: 0; background: var(--gold-dark);
+  transform: translateX(-100%); transition: transform 0.5s ease;
+}
+.hero-cta:hover::after { transform: translateX(0); }
+.hero-cta span { position: relative; z-index: 1; }
+
+.hero-visual {
+  position: relative; height: calc(100vh - 64px);
+  background: var(--photo-bg); overflow: hidden;
+}
+.hero-visual img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  opacity: 0; animation: fadeIn 1.2s 0.3s forwards;
+}
+.hero-visual::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(to right, var(--ivory) 0%, rgba(250,247,242,0.3) 12%, transparent 25%);
+  z-index: 1;
 }
 
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(24px); }
   to { opacity: 1; transform: translateY(0); }
 }
-@keyframes scrollPulse {
-  0%, 100% { opacity: 0.3; }
-  50% { opacity: 1; }
-}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* ── Divider ── */
 .divider {
@@ -177,354 +145,278 @@ nav.scrolled { box-shadow: 0 2px 40px rgba(0,0,0,0.06); }
   gap: 20px; padding: 48px 0;
 }
 .divider-line { width: 60px; height: 1px; background: var(--gold-light); }
-.divider-diamond {
-  width: 6px; height: 6px;
-  background: var(--gold);
-  transform: rotate(45deg);
-}
+.divider-diamond { width: 6px; height: 6px; background: var(--gold); transform: rotate(45deg); }
 
 /* ── Philosophy ── */
-.philosophy {
-  padding: 80px 24px;
-  text-align: center;
-  background: var(--warm-white);
-}
+.philosophy { padding: 80px 24px; text-align: center; background: var(--warm-white); }
 .philosophy-quote {
-  font-family: var(--serif);
-  font-size: clamp(1.3rem, 3vw, 2rem);
-  font-weight: 300;
-  font-style: italic;
-  line-height: 1.7;
-  color: var(--charcoal);
-  max-width: 750px;
-  margin: 0 auto 32px;
+  font-family: var(--serif); font-size: clamp(1.3rem, 3vw, 2rem);
+  font-weight: 300; font-style: italic; line-height: 1.7;
+  color: var(--charcoal); max-width: 750px; margin: 0 auto 32px;
 }
-.philosophy-quote::before { content: '"'; color: var(--gold-light); font-size: 1.4em; }
-.philosophy-quote::after { content: '"'; color: var(--gold-light); font-size: 1.4em; }
-.philosophy-attr {
-  font-size: 0.75rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
+.philosophy-quote::before { content: '\201C'; color: var(--gold-light); font-size: 1.4em; }
+.philosophy-quote::after { content: '\201D'; color: var(--gold-light); font-size: 1.4em; }
+.philosophy-attr { font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
 
 /* ── Story ── */
-.story {
-  padding: 100px 24px;
-  max-width: 820px;
-  margin: 0 auto;
-}
+.story { padding: 100px 24px; max-width: 820px; margin: 0 auto; }
 .section-label {
-  font-size: 0.65rem;
-  font-weight: 500;
-  letter-spacing: 0.35em;
-  text-transform: uppercase;
-  color: var(--gold);
-  margin-bottom: 24px;
+  font-size: 0.65rem; font-weight: 500; letter-spacing: 0.35em;
+  text-transform: uppercase; color: var(--gold); margin-bottom: 24px;
 }
 .section-heading {
-  font-family: var(--serif);
-  font-size: clamp(1.8rem, 4vw, 2.8rem);
-  font-weight: 400;
-  line-height: 1.3;
-  color: var(--charcoal);
-  margin-bottom: 40px;
+  font-family: var(--serif); font-size: clamp(1.8rem, 4vw, 2.8rem);
+  font-weight: 400; line-height: 1.3; color: var(--charcoal); margin-bottom: 40px;
 }
-.story-text {
-  font-size: 1rem;
-  line-height: 2;
-  color: var(--muted);
-  margin-bottom: 24px;
-}
-.story-text strong {
-  color: var(--ink);
-  font-weight: 500;
-}
+.story-text { font-size: 1rem; line-height: 2; color: var(--muted); margin-bottom: 24px; }
+.story-text strong { color: var(--ink); font-weight: 500; }
 
-/* ── Features Grid ── */
+/* ── Image Showcase (3 images, masonry-ish) ── */
+.image-showcase {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 4px;
+  max-width: 1200px; margin: 0 auto;
+  height: 560px;
+  overflow: hidden;
+}
+.image-showcase .img-large {
+  grid-row: 1 / 3;
+  background: var(--photo-bg);
+}
+.image-showcase .img-small {
+  background: var(--photo-bg);
+}
+.image-showcase img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  display: block;
+  transition: transform 0.8s ease;
+}
+.image-showcase .img-large img { object-position: center 30%; }
+.image-showcase div:hover img { transform: scale(1.03); }
+
+/* ── Features ── */
 .features {
   padding: 100px 24px;
-  background:
-    linear-gradient(135deg, var(--cream) 0%, var(--warm-white) 50%, var(--cream) 100%);
+  background: linear-gradient(135deg, var(--cream) 0%, var(--warm-white) 50%, var(--cream) 100%);
 }
 .features-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 48px;
-  max-width: 1000px;
-  margin: 48px auto 0;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 48px; max-width: 1000px; margin: 48px auto 0;
 }
 .feature-card {
-  text-align: center;
-  padding: 48px 32px;
+  text-align: center; padding: 48px 32px;
   background: rgba(255,253,249,0.7);
-  border: 1px solid rgba(184,152,106,0.12);
-  transition: all 0.4s;
+  border: 1px solid rgba(184,152,106,0.12); transition: all 0.4s;
 }
 .feature-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 20px 60px rgba(0,0,0,0.04);
   border-color: rgba(184,152,106,0.3);
 }
-.feature-icon {
-  font-size: 2rem;
-  margin-bottom: 24px;
-  display: block;
-}
+.feature-icon { font-size: 2rem; margin-bottom: 24px; display: block; }
 .feature-title {
-  font-family: var(--serif);
-  font-size: 1.2rem;
-  font-weight: 500;
-  color: var(--charcoal);
-  margin-bottom: 16px;
+  font-family: var(--serif); font-size: 1.2rem; font-weight: 500;
+  color: var(--charcoal); margin-bottom: 16px;
 }
-.feature-desc {
-  font-size: 0.88rem;
-  line-height: 1.8;
-  color: var(--muted);
-}
+.feature-desc { font-size: 0.88rem; line-height: 1.8; color: var(--muted); }
 
 /* ── Collection ── */
 .collection { padding: 100px 24px; }
 .collection-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 32px;
-  max-width: 1000px;
-  margin: 48px auto 0;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 28px; max-width: 1100px; margin: 56px auto 0;
 }
 .collection-item {
-  position: relative;
-  background: var(--cream);
-  padding: 48px 40px;
-  border: 1px solid rgba(184,152,106,0.1);
-  transition: all 0.4s;
+  background: var(--warm-white);
+  border: 1px solid rgba(184,152,106,0.08);
+  transition: all 0.4s; overflow: hidden;
+}
+.collection-item:hover {
+  box-shadow: 0 16px 48px rgba(0,0,0,0.06);
+  border-color: rgba(184,152,106,0.2);
+}
+.collection-img-wrap {
   overflow: hidden;
+  background: var(--photo-bg);
+  aspect-ratio: 4 / 3;
+  display: flex; align-items: center; justify-content: center;
 }
-.collection-item::before {
-  content: '';
-  position: absolute; top: 0; left: 0;
-  width: 3px; height: 0;
-  background: var(--gold);
-  transition: height 0.6s ease;
+.collection-img {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  padding: 16px;
+  display: block;
+  transition: transform 0.6s ease;
 }
-.collection-item:hover::before { height: 100%; }
-.collection-item:hover { box-shadow: 0 16px 48px rgba(0,0,0,0.05); }
+.collection-item:hover .collection-img { transform: scale(1.06); }
+.collection-body { padding: 24px 28px 28px; }
 .item-category {
-  font-size: 0.6rem;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  color: var(--gold);
-  margin-bottom: 12px;
+  font-size: 0.58rem; letter-spacing: 0.3em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 8px;
 }
 .item-name {
-  font-family: var(--serif);
-  font-size: 1.4rem;
-  font-weight: 500;
-  color: var(--charcoal);
-  margin-bottom: 12px;
+  font-family: var(--serif); font-size: 1.2rem; font-weight: 500;
+  color: var(--charcoal); margin-bottom: 10px;
 }
 .item-desc {
-  font-size: 0.88rem;
-  line-height: 1.8;
-  color: var(--muted);
-  margin-bottom: 20px;
+  font-size: 0.82rem; line-height: 1.75; color: var(--muted); margin-bottom: 14px;
 }
-.item-detail {
-  font-size: 0.75rem;
-  letter-spacing: 0.1em;
-  color: var(--rose);
+.item-link {
+  font-size: 0.68rem; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--gold-dark); text-decoration: none;
+  border-bottom: 1px solid transparent; transition: all 0.3s;
 }
+.item-link:hover { border-bottom-color: var(--gold-dark); }
 
 /* ── Process ── */
-.process {
-  padding: 100px 24px;
-  background: var(--charcoal);
-  color: var(--cream);
-}
+.process { padding: 100px 24px; background: var(--charcoal); color: var(--cream); }
 .process .section-label { color: var(--gold-light); }
 .process .section-heading { color: var(--cream); }
 .process-steps {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 32px;
-  max-width: 1000px;
-  margin: 48px auto 0;
-  counter-reset: step;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 32px; max-width: 1000px; margin: 48px auto 0; counter-reset: step;
 }
-.process-step {
-  text-align: center;
-  padding: 32px 20px;
-  position: relative;
-  counter-increment: step;
-}
+.process-step { text-align: center; padding: 32px 20px; counter-increment: step; }
 .process-step::before {
   content: counter(step, decimal-leading-zero);
-  font-family: var(--serif);
-  font-size: 2.5rem;
-  font-weight: 300;
-  color: rgba(184,152,106,0.25);
-  display: block;
-  margin-bottom: 20px;
+  font-family: var(--serif); font-size: 2.5rem; font-weight: 300;
+  color: rgba(184,152,106,0.25); display: block; margin-bottom: 20px;
 }
 .step-title {
-  font-family: var(--serif);
-  font-size: 1.1rem;
-  font-weight: 500;
-  color: var(--gold-light);
-  margin-bottom: 12px;
+  font-family: var(--serif); font-size: 1.1rem; font-weight: 500;
+  color: var(--gold-light); margin-bottom: 12px;
 }
-.step-desc {
-  font-size: 0.85rem;
-  line-height: 1.8;
-  color: rgba(243, 237, 227, 0.6);
+.step-desc { font-size: 0.85rem; line-height: 1.8; color: rgba(243,237,227,0.6); }
+
+/* ── Detail Gallery (photo02 series — close-up details) ── */
+.detail-gallery {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  background: var(--photo-bg);
+}
+.detail-gallery-item {
+  overflow: hidden;
+  background: var(--photo-bg);
+  aspect-ratio: 1 / 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.detail-gallery-item img {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  padding: 12px;
+  transition: transform 0.6s ease;
+  filter: saturate(0.9);
+}
+.detail-gallery-item:hover img {
+  transform: scale(1.08);
+  filter: saturate(1);
 }
 
 /* ── Testimonial ── */
-.testimonial {
-  padding: 100px 24px;
-  background: var(--warm-white);
-  text-align: center;
-}
+.testimonial { padding: 100px 24px; background: var(--warm-white); text-align: center; }
 .testimonial-text {
-  font-family: var(--serif);
-  font-size: clamp(1.15rem, 2.5vw, 1.6rem);
-  font-weight: 300;
-  font-style: italic;
-  line-height: 1.8;
-  color: var(--charcoal);
-  max-width: 700px;
-  margin: 0 auto 32px;
+  font-family: var(--serif); font-size: clamp(1.15rem, 2.5vw, 1.6rem);
+  font-weight: 300; font-style: italic; line-height: 1.8;
+  color: var(--charcoal); max-width: 700px; margin: 0 auto 32px;
 }
-.testimonial-author {
-  font-size: 0.75rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
+.testimonial-author { font-size: 0.75rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
 
 /* ── CTA ── */
 .cta {
-  padding: 120px 24px;
-  text-align: center;
-  position: relative;
-  background:
-    radial-gradient(ellipse at 50% 50%, rgba(184,152,106,0.08) 0%, transparent 70%),
-    var(--ivory);
+  padding: 100px 24px;
+  display: grid; grid-template-columns: 1fr 1fr;
+  align-items: center; max-width: 1200px; margin: 0 auto; gap: 60px;
+}
+.cta-image-wrap {
+  background: var(--photo-bg);
+  aspect-ratio: 3 / 4;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  max-height: 560px;
+}
+.cta-image {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  padding: 20px;
 }
 .cta-heading {
-  font-family: var(--serif);
-  font-size: clamp(2rem, 5vw, 3.5rem);
-  font-weight: 300;
-  line-height: 1.2;
-  color: var(--charcoal);
-  margin-bottom: 24px;
+  font-family: var(--serif); font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 300; line-height: 1.2; color: var(--charcoal); margin-bottom: 24px;
 }
 .cta-heading em { font-style: italic; color: var(--gold-dark); }
-.cta-sub {
-  font-size: 1rem;
-  color: var(--muted);
-  margin-bottom: 48px;
-  max-width: 500px;
-  margin-left: auto; margin-right: auto;
-  line-height: 1.8;
-}
+.cta-sub { font-size: 1rem; color: var(--muted); margin-bottom: 40px; line-height: 1.8; }
 .cta-btn {
-  display: inline-block;
-  font-size: 0.78rem;
-  font-weight: 500;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  padding: 18px 56px;
-  background: var(--charcoal);
-  color: var(--cream);
-  text-decoration: none;
-  transition: all 0.4s;
-  position: relative;
-  overflow: hidden;
+  display: inline-block; font-size: 0.78rem; font-weight: 500;
+  letter-spacing: 0.22em; text-transform: uppercase; padding: 18px 56px;
+  background: var(--charcoal); color: var(--cream); text-decoration: none;
+  transition: all 0.4s; position: relative; overflow: hidden;
 }
 .cta-btn::after {
-  content: '';
-  position: absolute; inset: 0;
-  background: var(--gold-dark);
-  transform: translateX(-100%);
-  transition: transform 0.5s ease;
+  content: ''; position: absolute; inset: 0; background: var(--gold-dark);
+  transform: translateX(-100%); transition: transform 0.5s ease;
 }
 .cta-btn:hover::after { transform: translateX(0); }
 .cta-btn span { position: relative; z-index: 1; }
 .cta-secondary {
-  display: block;
-  margin-top: 20px;
-  font-size: 0.72rem;
-  letter-spacing: 0.15em;
-  color: var(--muted);
-  text-decoration: none;
-  transition: color 0.3s;
+  display: inline-block; margin-left: 24px;
+  font-size: 0.72rem; letter-spacing: 0.15em;
+  color: var(--muted); text-decoration: none; transition: color 0.3s;
 }
 .cta-secondary:hover { color: var(--gold-dark); }
 
 /* ── Footer ── */
 footer {
   padding: 60px 24px;
-  border-top: 1px solid rgba(184,152,106,0.15);
-  text-align: center;
+  border-top: 1px solid rgba(184,152,106,0.15); text-align: center;
 }
 .footer-brand {
-  font-family: var(--serif);
-  font-size: 1.1rem;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  color: var(--charcoal);
-  margin-bottom: 16px;
+  font-family: var(--serif); font-size: 1.1rem; font-weight: 500;
+  letter-spacing: 0.08em; color: var(--charcoal); margin-bottom: 16px;
 }
-.footer-info {
-  font-size: 0.78rem;
-  color: var(--muted);
-  line-height: 2;
-  margin-bottom: 24px;
-}
+.footer-info { font-size: 0.78rem; color: var(--muted); line-height: 2; margin-bottom: 24px; }
 .footer-links { display: flex; justify-content: center; gap: 32px; flex-wrap: wrap; }
 .footer-links a {
-  font-size: 0.7rem;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--muted);
-  text-decoration: none;
-  transition: color 0.3s;
+  font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--muted); text-decoration: none; transition: color 0.3s;
 }
 .footer-links a:hover { color: var(--gold-dark); }
-.footer-copy {
-  margin-top: 40px;
-  font-size: 0.7rem;
-  color: rgba(107, 101, 96, 0.5);
-}
+.footer-copy { margin-top: 40px; font-size: 0.7rem; color: rgba(107,101,96,0.5); }
 
 /* ── Scroll Animations ── */
 .reveal {
-  opacity: 0;
-  transform: translateY(32px);
+  opacity: 0; transform: translateY(32px);
   transition: opacity 0.8s ease, transform 0.8s ease;
 }
-.reveal.visible {
-  opacity: 1;
-  transform: translateY(0);
-}
+.reveal.visible { opacity: 1; transform: translateY(0); }
 
 /* ── Responsive ── */
-@media (max-width: 768px) {
+@media (max-width: 900px) {
+  .hero { grid-template-columns: 1fr; }
+  .hero-content { padding: 120px 24px 48px; text-align: center; }
+  .hero-sub { margin-left: auto; margin-right: auto; }
+  .hero-visual { height: 60vh; }
+  .hero-visual::before { background: linear-gradient(to bottom, var(--ivory) 0%, transparent 25%); }
+  .image-showcase { grid-template-columns: 1fr; grid-template-rows: auto; height: auto; }
+  .image-showcase .img-large { grid-row: auto; aspect-ratio: 16/10; }
+  .image-showcase .img-small { aspect-ratio: 16/10; }
+  .features-grid { grid-template-columns: 1fr; gap: 24px; }
+  .collection-grid { grid-template-columns: 1fr; max-width: 480px; }
+  .process-steps { grid-template-columns: repeat(2, 1fr); gap: 24px; }
+  .detail-gallery { grid-template-columns: repeat(2, 1fr); }
+  .cta { grid-template-columns: 1fr; padding: 60px 24px; text-align: center; }
+  .cta-image-wrap { max-height: 400px; aspect-ratio: auto; }
+  .cta-secondary { display: block; margin: 16px 0 0; }
   .nav-links { display: none; }
   .nav-mobile-toggle { display: block; }
-  .features-grid { grid-template-columns: 1fr; gap: 24px; }
-  .collection-grid { grid-template-columns: 1fr; }
-  .process-steps { grid-template-columns: repeat(2, 1fr); gap: 24px; }
-  .hero { min-height: 90vh; padding: 100px 20px 60px; }
-  .story { padding: 60px 20px; }
-  .features, .collection, .process, .testimonial, .cta { padding: 60px 20px; }
-  .feature-card { padding: 32px 24px; }
-  .collection-item { padding: 32px 28px; }
 }
 @media (max-width: 480px) {
   .process-steps { grid-template-columns: 1fr; }
+  .detail-gallery { grid-template-columns: 1fr 1fr; }
   .nav-cta { padding: 8px 16px; font-size: 0.65rem; }
 }
 </style>
@@ -540,7 +432,7 @@ footer {
       <li><a href="#collection">Collection</a></li>
       <li><a href="#process">Craft</a></li>
     </ul>
-    <a href="https://www.etsy.com/" class="nav-cta" target="_blank" rel="noopener">Visit Etsy Shop →</a>
+    <a href="https://www.etsy.com/" class="nav-cta" target="_blank" rel="noopener">Visit Etsy Shop &rarr;</a>
     <button class="nav-mobile-toggle" aria-label="Menu">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
@@ -551,50 +443,45 @@ footer {
 
 <!-- Hero -->
 <section class="hero">
-  <p class="hero-tagline">Handcrafted in Shizuoka, Japan · Since 1968</p>
-  <h1 class="hero-title">
-    Where <em>Artistry</em><br>Meets Miniature
-  </h1>
-  <p class="hero-sub">
-    Exquisite 1/3 scale furniture, handcrafted by master artisans<br>
-    for the world's most discerning doll collectors.
-  </p>
-  <div class="hero-scroll">
-    <div class="hero-scroll-line"></div>
-    Discover
+  <div class="hero-content">
+    <p class="hero-tagline">Handcrafted in Shizuoka, Japan &middot; Since 1968</p>
+    <h1 class="hero-title">Where <em>Artistry</em><br>Meets Miniature</h1>
+    <p class="hero-sub">Exquisite 1/3 scale furniture, handcrafted by master artisans for the world's most discerning doll collectors.</p>
+    <a href="https://www.etsy.com/" class="hero-cta" target="_blank" rel="noopener"><span>Shop on Etsy &rarr;</span></a>
+  </div>
+  <div class="hero-visual">
+    <img src="https://www.petit-de-continue.com/img/main01.jpg" alt="Petit.Continue miniature furniture">
   </div>
 </section>
 
 <!-- Philosophy -->
 <section class="philosophy">
-  <div class="divider">
-    <div class="divider-line"></div>
-    <div class="divider-diamond"></div>
-    <div class="divider-line"></div>
-  </div>
-  <blockquote class="philosophy-quote reveal">
-    Beautiful furniture creates beautiful spaces.<br>
-    We craft furniture that is loved and brings joy.
-  </blockquote>
-  <p class="philosophy-attr reveal">— Matsunaga Kobo Philosophy</p>
+  <div class="divider"><div class="divider-line"></div><div class="divider-diamond"></div><div class="divider-line"></div></div>
+  <blockquote class="philosophy-quote reveal">Beautiful furniture creates beautiful spaces.<br>We craft furniture that is loved and brings joy.</blockquote>
+  <p class="philosophy-attr reveal">&mdash; Matsunaga Kobo Philosophy</p>
 </section>
 
 <!-- Story -->
 <section class="story" id="story">
   <p class="section-label reveal">Our Story</p>
-  <h2 class="section-heading reveal">
-    From Full-Scale Elegance<br>to Miniature Masterpieces
-  </h2>
-  <p class="story-text reveal">
-    For over five decades, <strong>Matsunaga Kobo</strong> has crafted antique-style furniture in Shizuoka — Japan's historic center of fine woodworking. Our full-size brand, CONTINUE, is beloved for its flowing curves, hand-carved details, and signature cabriole legs.
-  </p>
-  <p class="story-text reveal">
-    In 2023, we channeled that same passion into <strong>Petit.Continue</strong> — faithfully recreating every sculpted curve, every hand-carved flourish, at 1/3 scale. These are not toys. They are <strong>miniature works of furniture art</strong>, made with the same techniques, the same woods, and the same hands that build our full-size pieces.
-  </p>
-  <p class="story-text reveal">
-    Each piece fits 40–60 cm dolls, from SD to DD and beyond — transforming your doll's world into an atmosphere of timeless elegance.
-  </p>
+  <h2 class="section-heading reveal">From Full-Scale Elegance<br>to Miniature Masterpieces</h2>
+  <p class="story-text reveal">For over five decades, <strong>Matsunaga Kobo</strong> has crafted antique-style furniture in Shizuoka &mdash; Japan's historic center of fine woodworking. Our full-size brand, CONTINUE, is beloved for its flowing curves, hand-carved details, and signature cabriole legs.</p>
+  <p class="story-text reveal">In 2023, we channeled that same passion into <strong>Petit.Continue</strong> &mdash; faithfully recreating every sculpted curve, every hand-carved flourish, at 1/3 scale. These are not toys. They are <strong>miniature works of furniture art</strong>, made with the same techniques, the same woods, and the same hands that build our full-size pieces.</p>
+  <p class="story-text reveal">Each piece fits 40&ndash;60 cm dolls, from SD to DD and beyond &mdash; transforming your doll's world into an atmosphere of timeless elegance.</p>
 </section>
+
+<!-- Image Showcase (masonry layout) -->
+<div class="image-showcase reveal">
+  <div class="img-large" style="overflow:hidden">
+    <img src="https://www.petit-de-continue.com/img/main02.jpg" alt="Petit.Continue craftsmanship" loading="lazy">
+  </div>
+  <div class="img-small" style="overflow:hidden">
+    <img src="https://www.petit-de-continue.com/img/main03.jpg" alt="Handcrafted miniature detail" loading="lazy">
+  </div>
+  <div class="img-small" style="overflow:hidden">
+    <img src="https://www.petit-de-continue.com/img/product05_photo01.jpg" alt="Petit Room" loading="lazy">
+  </div>
+</div>
 
 <!-- Features -->
 <section class="features">
@@ -604,17 +491,17 @@ footer {
   </div>
   <div class="features-grid">
     <div class="feature-card reveal">
-      <span class="feature-icon">✦</span>
+      <span class="feature-icon">&starf;</span>
       <h3 class="feature-title">Real Furniture Craft</h3>
-      <p class="feature-desc">Built with the same joinery, carving, and finishing techniques as our full-size CONTINUE line. Not a miniature imitation — a miniature original.</p>
+      <p class="feature-desc">Built with the same joinery, carving, and finishing techniques as our full-size CONTINUE line. Not a miniature imitation &mdash; a miniature original.</p>
     </div>
     <div class="feature-card reveal">
-      <span class="feature-icon">◈</span>
+      <span class="feature-icon">&#9672;</span>
       <h3 class="feature-title">Artisan Handmade</h3>
-      <p class="feature-desc">Every cabriole leg is hand-carved. Every curve is sculpted by seasoned craftsmen. No two pieces are ever identical — each carries the warmth of the human hand.</p>
+      <p class="feature-desc">Every cabriole leg is hand-carved. Every curve is sculpted by seasoned craftsmen. No two pieces are ever identical &mdash; each carries the warmth of the human hand.</p>
     </div>
     <div class="feature-card reveal">
-      <span class="feature-icon">❖</span>
+      <span class="feature-icon">&#10070;</span>
       <h3 class="feature-title">Made in Shizuoka</h3>
       <p class="feature-desc">Shizuoka has been the heart of Japanese woodcraft for centuries. Our workshop carries forward this living tradition with every piece we create.</p>
     </div>
@@ -628,30 +515,79 @@ footer {
     <h2 class="section-heading reveal">Signature Pieces</h2>
   </div>
   <div class="collection-grid">
+
     <div class="collection-item reveal">
-      <p class="item-category">Iconic</p>
-      <h3 class="item-name">Petit Couch</h3>
-      <p class="item-desc">Our most beloved piece. The graceful backrest curve and delicate carvings create an undeniable presence. Available in 9 cushion colors to match any aesthetic.</p>
-      <p class="item-detail">Best Seller · Hand-carved cabriole legs · 9 fabric options</p>
+      <div class="collection-img-wrap">
+        <img class="collection-img" src="https://www.petit-de-continue.com/img/product02_photo01.jpg" alt="Petit Couch" loading="lazy">
+      </div>
+      <div class="collection-body">
+        <p class="item-category">Best Seller</p>
+        <h3 class="item-name">Petit Couch</h3>
+        <p class="item-desc">The graceful backrest curve and delicate carvings create an undeniable presence. Available in 9 cushion colors.</p>
+        <a href="https://www.etsy.com/" class="item-link" target="_blank" rel="noopener">View on Etsy &rarr;</a>
+      </div>
     </div>
+
     <div class="collection-item reveal">
-      <p class="item-category">Elegant</p>
-      <h3 class="item-name">Petit Chair</h3>
-      <p class="item-desc">Sculptural curves that make your doll look breathtaking. Individually upholstered with tack detailing on the reverse — every angle is considered.</p>
-      <p class="item-detail">Collector Favorite · Tack-stud detailing · Multiple colors</p>
+      <div class="collection-img-wrap">
+        <img class="collection-img" src="https://www.petit-de-continue.com/img/product04_photo01.jpg" alt="Petit Chair" loading="lazy">
+      </div>
+      <div class="collection-body">
+        <p class="item-category">Elegant</p>
+        <h3 class="item-name">Petit Chair</h3>
+        <p class="item-desc">Born from a collaboration with Italian craftsmen. Sculptural curves and tack-stud detailing on the reverse.</p>
+        <a href="https://www.etsy.com/" class="item-link" target="_blank" rel="noopener">View on Etsy &rarr;</a>
+      </div>
     </div>
+
     <div class="collection-item reveal">
-      <p class="item-category">Statement</p>
-      <h3 class="item-name">Petit Wardrobe</h3>
-      <p class="item-desc">A functional masterpiece for displaying and storing doll garments. Carved door panels and interior detailing that reward close inspection.</p>
-      <p class="item-detail">Functional Art · Full interior finish · Carved doors</p>
+      <div class="collection-img-wrap">
+        <img class="collection-img" src="https://www.petit-de-continue.com/img/product01_photo01.jpg" alt="Petit Wardrobe" loading="lazy">
+      </div>
+      <div class="collection-body">
+        <p class="item-category">Statement</p>
+        <h3 class="item-name">Petit Wardrobe</h3>
+        <p class="item-desc">A functional masterpiece for doll garments. Hand-carved doors and meticulous interior detailing.</p>
+        <a href="https://www.etsy.com/" class="item-link" target="_blank" rel="noopener">View on Etsy &rarr;</a>
+      </div>
     </div>
+
     <div class="collection-item reveal">
-      <p class="item-category">New</p>
-      <h3 class="item-name">Dresser Petit Arole</h3>
-      <p class="item-desc">The newest addition to the collection. An elegant vanity dresser with flowing lines and mirror, capturing the essence of European antique style.</p>
-      <p class="item-detail">2026 Release · Limited Production · Mirror included</p>
+      <div class="collection-img-wrap">
+        <img class="collection-img" src="https://www.petit-de-continue.com/img/product06_photo01.jpg" alt="Full-length Mirror" loading="lazy">
+      </div>
+      <div class="collection-body">
+        <p class="item-category">Graceful</p>
+        <h3 class="item-name">Full-length Mirror</h3>
+        <p class="item-desc">Graceful curves frame an oval mirror with a charming accessory tray. Sculpture meets function.</p>
+        <a href="https://www.etsy.com/" class="item-link" target="_blank" rel="noopener">View on Etsy &rarr;</a>
+      </div>
     </div>
+
+    <div class="collection-item reveal">
+      <div class="collection-img-wrap">
+        <img class="collection-img" src="https://www.petit-de-continue.com/img/product07_photo01.jpg" alt="Dining Table" loading="lazy">
+      </div>
+      <div class="collection-body">
+        <p class="item-category">New</p>
+        <h3 class="item-name">Dining Table</h3>
+        <p class="item-desc">A flowing curved tabletop with sculpted legs, honed to perfection through countless design iterations.</p>
+        <a href="https://www.etsy.com/" class="item-link" target="_blank" rel="noopener">View on Etsy &rarr;</a>
+      </div>
+    </div>
+
+    <div class="collection-item reveal">
+      <div class="collection-img-wrap">
+        <img class="collection-img" src="https://www.petit-de-continue.com/img/product08_photo01.jpg" alt="Center Table" loading="lazy">
+      </div>
+      <div class="collection-body">
+        <p class="item-category">Coordinate</p>
+        <h3 class="item-name">Center Table</h3>
+        <p class="item-desc">Natural wood diamond inlay with beautiful curves. Pair with the Petit Couch for an elegant scene.</p>
+        <a href="https://www.etsy.com/" class="item-link" target="_blank" rel="noopener">View on Etsy &rarr;</a>
+      </div>
+    </div>
+
   </div>
 </section>
 
@@ -664,116 +600,92 @@ footer {
   <div class="process-steps">
     <div class="process-step reveal">
       <h3 class="step-title">Design</h3>
-      <p class="step-desc">Every detail from our full-size CONTINUE line is redrawn at 1/3 scale — preserving proportions that feel right.</p>
+      <p class="step-desc">Not a simple 1/3 reduction &mdash; every proportion is redesigned to look beautiful at miniature scale.</p>
     </div>
     <div class="process-step reveal">
       <h3 class="step-title">Woodwork</h3>
-      <p class="step-desc">Solid wood is shaped and carved by hand. Cabriole legs are sculpted to their absolute thinnest — a true test of mastery.</p>
+      <p class="step-desc">Solid wood shaped and carved by hand. Cabriole legs sculpted to their thinnest &mdash; a true test of mastery.</p>
     </div>
     <div class="process-step reveal">
       <h3 class="step-title">Finishing</h3>
-      <p class="step-desc">Multiple coats of lacquer are applied and polished. Upholstery is hand-stitched. Every surface is refined to a flawless touch.</p>
+      <p class="step-desc">Multiple coats of lacquer, hand-stitched upholstery, and tack-stud detailing. Every surface refined to perfection.</p>
     </div>
     <div class="process-step reveal">
       <h3 class="step-title">Delivery</h3>
-      <p class="step-desc">Carefully wrapped and cushioned for international shipping. Each piece arrives gallery-ready, directly from our Shizuoka workshop to you.</p>
+      <p class="step-desc">Carefully cushioned for international shipping. Gallery-ready, from our Shizuoka workshop to your door.</p>
     </div>
   </div>
 </section>
 
+<!-- Detail Gallery (square contain with padding) -->
+<div class="detail-gallery">
+  <div class="detail-gallery-item">
+    <img src="https://www.petit-de-continue.com/img/product01_photo02.jpg" alt="Wardrobe detail" loading="lazy">
+  </div>
+  <div class="detail-gallery-item">
+    <img src="https://www.petit-de-continue.com/img/product02_photo02.jpg" alt="Couch detail" loading="lazy">
+  </div>
+  <div class="detail-gallery-item">
+    <img src="https://www.petit-de-continue.com/img/product04_photo02.jpg" alt="Chair detail" loading="lazy">
+  </div>
+  <div class="detail-gallery-item">
+    <img src="https://www.petit-de-continue.com/img/product06_photo02.jpg" alt="Mirror detail" loading="lazy">
+  </div>
+</div>
+
 <!-- Testimonial -->
 <section class="testimonial">
-  <div class="divider">
-    <div class="divider-line"></div>
-    <div class="divider-diamond"></div>
-    <div class="divider-line"></div>
-  </div>
-  <p class="testimonial-text reveal">
-    The level of detail is extraordinary. You can feel the craftsmanship the moment you hold it — this is real furniture, just smaller. Nothing else on the market compares.
-  </p>
-  <p class="testimonial-author reveal">— Dolpa Collector, Tokyo</p>
+  <div class="divider"><div class="divider-line"></div><div class="divider-diamond"></div><div class="divider-line"></div></div>
+  <p class="testimonial-text reveal">The level of detail is extraordinary. You can feel the craftsmanship the moment you hold it &mdash; this is real furniture, just smaller. Nothing else on the market compares.</p>
+  <p class="testimonial-author reveal">&mdash; Dolpa Collector, Tokyo</p>
 </section>
 
 <!-- CTA -->
 <section class="cta">
-  <h2 class="cta-heading reveal">
-    Bring <em>Elegance</em><br>to Your Doll's World
-  </h2>
-  <p class="cta-sub reveal">
-    Each piece is handcrafted to order by our artisans in Shizuoka.<br>
-    Worldwide shipping available.
-  </p>
-  <a href="https://www.etsy.com/" class="cta-btn reveal" target="_blank" rel="noopener">
-    <span>Shop on Etsy →</span>
-  </a>
-  <a href="https://www.petit-de-continue.com/" class="cta-secondary reveal" target="_blank" rel="noopener">
-    Or visit our official site →
-  </a>
+  <div class="cta-image-wrap reveal">
+    <img class="cta-image" src="https://www.petit-de-continue.com/img/product05_photo02.jpg" alt="Petit Room by Petit.Continue" loading="lazy">
+  </div>
+  <div class="cta-content">
+    <h2 class="cta-heading reveal">Bring <em>Elegance</em><br>to Your Doll's World</h2>
+    <p class="cta-sub reveal">Each piece is handcrafted to order by our artisans in Shizuoka. Worldwide shipping available.</p>
+    <div class="reveal">
+      <a href="https://www.etsy.com/" class="cta-btn" target="_blank" rel="noopener"><span>Shop on Etsy &rarr;</span></a>
+      <a href="https://www.petit-de-continue.com/" class="cta-secondary" target="_blank" rel="noopener">Official site &rarr;</a>
+    </div>
+  </div>
 </section>
 
 <!-- Footer -->
 <footer>
   <p class="footer-brand">Petit.Continue</p>
-  <p class="footer-info">
-    by Matsunaga Kobo Co., Ltd. · Shizuoka City, Japan<br>
-    Handcrafting fine furniture since 1968
-  </p>
+  <p class="footer-info">by Matsunaga Kobo Co., Ltd. &middot; Shizuoka City, Japan<br>Handcrafting fine furniture since 1968</p>
   <div class="footer-links">
     <a href="https://www.etsy.com/" target="_blank" rel="noopener">Etsy Shop</a>
     <a href="https://www.petit-de-continue.com/" target="_blank" rel="noopener">Official Site</a>
-    <a href="https://www.instagram.com/" target="_blank" rel="noopener">Instagram</a>
-    <a href="https://twitter.com/" target="_blank" rel="noopener">X (Twitter)</a>
+    <a href="https://matsunaga-kobo.shop-pro.jp/?mode=cate&cbid=2878227&csid=0" target="_blank" rel="noopener">Online Shop</a>
+    <a href="https://twitter.com/petit_continue" target="_blank" rel="noopener">X (Twitter)</a>
   </div>
-  <p class="footer-copy">© 2026 Matsunaga Kobo Co., Ltd. All rights reserved.</p>
+  <p class="footer-copy">&copy; 2026 Matsunaga Kobo Co., Ltd. All rights reserved.</p>
 </footer>
 
 <script>
-// Nav scroll effect
 const nav = document.getElementById('nav');
-window.addEventListener('scroll', () => {
-  nav.classList.toggle('scrolled', window.scrollY > 40);
-});
-
-// Scroll reveal
+window.addEventListener('scroll', () => { nav.classList.toggle('scrolled', window.scrollY > 40); });
 const observer = new IntersectionObserver((entries) => {
-  entries.forEach(entry => {
-    if (entry.isIntersecting) {
-      entry.target.classList.add('visible');
-    }
-  });
-}, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
-
+  entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('visible'); });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
 document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
-
-// Mobile nav toggle
 const toggle = document.querySelector('.nav-mobile-toggle');
 const links = document.querySelector('.nav-links');
-let mobileOpen = false;
+let open = false;
 toggle.addEventListener('click', () => {
-  mobileOpen = !mobileOpen;
-  if (mobileOpen) {
-    links.style.display = 'flex';
-    links.style.flexDirection = 'column';
-    links.style.position = 'absolute';
-    links.style.top = '64px';
-    links.style.left = '0';
-    links.style.right = '0';
-    links.style.background = 'rgba(250,247,242,0.98)';
-    links.style.padding = '24px';
-    links.style.gap = '20px';
-    links.style.borderBottom = '1px solid rgba(184,152,106,0.15)';
-  } else {
-    links.style.display = '';
-    links.style.flexDirection = '';
-    links.style.position = '';
-    links.style.top = '';
-    links.style.left = '';
-    links.style.right = '';
-    links.style.background = '';
-    links.style.padding = '';
-    links.style.gap = '';
-    links.style.borderBottom = '';
-  }
+  open = !open;
+  Object.assign(links.style, open ? {
+    display:'flex', flexDirection:'column', position:'absolute',
+    top:'64px', left:'0', right:'0',
+    background:'rgba(250,247,242,0.98)', padding:'24px',
+    gap:'20px', borderBottom:'1px solid rgba(184,152,106,0.15)'
+  } : { display:'', flexDirection:'', position:'', top:'', left:'', right:'', background:'', padding:'', gap:'', borderBottom:'' });
 });
 </script>
 

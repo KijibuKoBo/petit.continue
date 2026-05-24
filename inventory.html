@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>在庫管理 — Petit.Continue / 有限会社松永工房</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Jost:wght@300;400;500&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --ivory: #FAF7F2;
+  --cream: #F3EDE3;
+  --warm-white: #FFFDF9;
+  --charcoal: #1A1715;
+  --ink: #2C2825;
+  --muted: #6B6560;
+  --line: rgba(184,152,106,0.2);
+  --line-soft: rgba(184,152,106,0.12);
+  --gold: #B8986A;
+  --gold-light: #D4BE91;
+  --gold-dark: #8C6D3F;
+  --ok: #5B7A52;
+  --ok-bg: #EAF0E6;
+  --warn: #B5852E;
+  --warn-bg: #F7EFDC;
+  --bad: #A8453B;
+  --bad-bg: #F5E2DF;
+  --info: #4A6B82;
+  --info-bg: #E6EEF3;
+  --serif: 'Cormorant Garamond', 'Noto Sans JP', serif;
+  --sans: 'Jost', 'Noto Sans JP', sans-serif;
+  --shadow: 0 12px 40px rgba(26,23,21,0.08);
+}
+
+html { font-size: 16px; }
+body {
+  font-family: var(--sans);
+  color: var(--ink);
+  background: var(--ivory);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+}
+
+/* ── Header ── */
+.app-header {
+  background: var(--charcoal);
+  color: var(--cream);
+  padding: 0 24px;
+  position: sticky; top: 0; z-index: 50;
+  box-shadow: 0 2px 24px rgba(0,0,0,0.18);
+}
+.app-header-inner {
+  max-width: 1240px; margin: 0 auto;
+  display: flex; align-items: center; gap: 28px; height: 60px;
+}
+.app-brand {
+  font-family: var(--serif); font-size: 1.25rem; font-weight: 600;
+  letter-spacing: 0.05em; white-space: nowrap;
+}
+.app-brand span { color: var(--gold-light); }
+.app-brand small {
+  display: block; font-family: var(--sans); font-size: 0.6rem;
+  letter-spacing: 0.18em; color: rgba(243,237,227,0.55); font-weight: 300;
+  text-transform: uppercase; margin-top: -2px;
+}
+.app-tabs { display: flex; gap: 4px; flex: 1; overflow-x: auto; }
+.app-tabs button {
+  background: none; border: none; cursor: pointer;
+  color: rgba(243,237,227,0.6); font-family: var(--sans);
+  font-size: 0.82rem; letter-spacing: 0.04em; padding: 8px 14px;
+  border-radius: 6px; white-space: nowrap; transition: all 0.2s;
+}
+.app-tabs button:hover { color: var(--cream); background: rgba(255,255,255,0.06); }
+.app-tabs button.active { color: var(--charcoal); background: var(--gold-light); font-weight: 500; }
+
+/* ── Layout ── */
+main { max-width: 1240px; margin: 0 auto; padding: 32px 24px 80px; }
+.view { display: none; animation: fade 0.35s ease; }
+.view.active { display: block; }
+@keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+.view-head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 16px; margin-bottom: 24px; flex-wrap: wrap;
+}
+.view-title {
+  font-family: var(--serif); font-size: 1.9rem; font-weight: 500; color: var(--charcoal);
+}
+.view-sub { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--sans); font-size: 0.8rem; letter-spacing: 0.03em;
+  padding: 9px 18px; border: 1px solid var(--charcoal); border-radius: 6px;
+  background: var(--charcoal); color: var(--cream); cursor: pointer;
+  transition: all 0.2s; white-space: nowrap;
+}
+.btn:hover { background: var(--gold-dark); border-color: var(--gold-dark); }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn.ghost:hover { background: var(--cream); border-color: var(--gold); color: var(--gold-dark); }
+.btn.sm { padding: 5px 11px; font-size: 0.72rem; border-radius: 5px; }
+.btn.danger { background: var(--bad); border-color: var(--bad); }
+.btn.danger:hover { background: #8d362e; border-color: #8d362e; }
+
+/* ── KPI cards ── */
+.kpi-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px;
+}
+.kpi {
+  background: var(--warm-white); border: 1px solid var(--line-soft);
+  border-radius: 12px; padding: 22px 24px; box-shadow: var(--shadow);
+}
+.kpi-label {
+  font-size: 0.68rem; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--gold-dark); margin-bottom: 10px; font-weight: 500;
+}
+.kpi-value { font-family: var(--serif); font-size: 2.4rem; font-weight: 600; line-height: 1; color: var(--charcoal); }
+.kpi-value small { font-family: var(--sans); font-size: 0.85rem; font-weight: 400; color: var(--muted); margin-left: 4px; }
+.kpi-note { font-size: 0.74rem; color: var(--muted); margin-top: 8px; }
+.kpi.alert .kpi-value { color: var(--bad); }
+
+/* ── Cards / panels ── */
+.panel {
+  background: var(--warm-white); border: 1px solid var(--line-soft);
+  border-radius: 12px; box-shadow: var(--shadow); margin-bottom: 28px; overflow: hidden;
+}
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 16px 22px; border-bottom: 1px solid var(--line-soft);
+}
+.panel-head h3 { font-family: var(--serif); font-size: 1.2rem; font-weight: 500; color: var(--charcoal); }
+.panel-head .count { font-size: 0.74rem; color: var(--muted); }
+.panel-body { padding: 6px 0; }
+.panel-pad { padding: 22px; }
+
+/* ── Tables ── */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+thead th {
+  text-align: left; font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--muted); font-weight: 500; padding: 12px 18px; border-bottom: 1px solid var(--line);
+  white-space: nowrap; background: var(--cream);
+}
+tbody td { padding: 13px 18px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: rgba(243,237,227,0.45); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.center, th.center { text-align: center; }
+.prod-name { font-weight: 500; color: var(--charcoal); }
+.prod-cat { font-size: 0.72rem; color: var(--muted); }
+.muted { color: var(--muted); }
+.strong-num { font-weight: 700; font-size: 0.95rem; color: var(--charcoal); }
+
+/* ── Badges ── */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.68rem; font-weight: 500; letter-spacing: 0.04em;
+  padding: 3px 10px; border-radius: 100px; white-space: nowrap;
+}
+.badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.8; }
+.badge.ok { color: var(--ok); background: var(--ok-bg); }
+.badge.warn { color: var(--warn); background: var(--warn-bg); }
+.badge.bad { color: var(--bad); background: var(--bad-bg); }
+.badge.info { color: var(--info); background: var(--info-bg); }
+.badge.neutral { color: var(--muted); background: var(--cream); }
+
+/* ── Toolbar / filters ── */
+.toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+select, input[type=text], input[type=number], input[type=date] {
+  font-family: var(--sans); font-size: 0.84rem; color: var(--ink);
+  padding: 8px 11px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--warm-white); transition: border 0.2s;
+}
+select:focus, input:focus { outline: none; border-color: var(--gold); }
+label.field { display: block; font-size: 0.74rem; color: var(--muted); margin-bottom: 5px; letter-spacing: 0.02em; }
+.field-group { margin-bottom: 16px; }
+.field-group input, .field-group select { width: 100%; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+/* ── Empty state ── */
+.empty { text-align: center; padding: 48px 24px; color: var(--muted); }
+.empty-icon { font-size: 2rem; color: var(--gold-light); margin-bottom: 10px; }
+
+/* ── Action cell ── */
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(26,23,21,0.42);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+  display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--warm-white); border-radius: 14px; box-shadow: 0 30px 80px rgba(0,0,0,0.3);
+  width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; animation: pop 0.25s ease;
+}
+@keyframes pop { from { opacity: 0; transform: scale(0.96) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+.modal-head { padding: 22px 26px 0; }
+.modal-head h3 { font-family: var(--serif); font-size: 1.4rem; font-weight: 500; color: var(--charcoal); }
+.modal-head p { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
+.modal-body { padding: 20px 26px; }
+.modal-foot { padding: 0 26px 24px; display: flex; gap: 10px; justify-content: flex-end; }
+.form-error { color: var(--bad); font-size: 0.76rem; margin-top: 4px; min-height: 1em; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: var(--charcoal); color: var(--cream); padding: 12px 22px; border-radius: 8px;
+  font-size: 0.84rem; box-shadow: var(--shadow); opacity: 0; pointer-events: none;
+  transition: all 0.3s ease; z-index: 200;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.err { background: var(--bad); }
+
+/* ── Alert banner ── */
+.alert-banner {
+  display: flex; align-items: center; gap: 10px; background: var(--bad-bg);
+  border: 1px solid rgba(168,69,59,0.25); color: var(--bad); border-radius: 10px;
+  padding: 13px 18px; font-size: 0.85rem; margin-bottom: 24px;
+}
+.alert-banner.none { background: var(--ok-bg); border-color: rgba(91,122,82,0.25); color: var(--ok); }
+
+.hint { font-size: 0.78rem; color: var(--muted); line-height: 1.7; }
+.foot-note { text-align: center; font-size: 0.72rem; color: var(--muted); margin-top: 48px; }
+.foot-note a { color: var(--gold-dark); }
+
+@media (max-width: 860px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .field-row { grid-template-columns: 1fr; }
+  .app-brand small { display: none; }
+}
+@media (max-width: 520px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+  main { padding: 24px 14px 60px; }
+}
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="app-header-inner">
+    <div class="app-brand">Petit<span>.</span>Continue<small>Matsunaga Kobo — 在庫管理</small></div>
+    <nav class="app-tabs" id="tabs">
+      <button data-view="dashboard" class="active">ダッシュボード</button>
+      <button data-view="production">生産予定</button>
+      <button data-view="shipments">出荷記録</button>
+      <button data-view="inventory">在庫・製品</button>
+      <button data-view="data">データ管理</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- ===== Dashboard ===== -->
+  <section class="view active" id="view-dashboard">
+    <div class="view-head">
+      <div>
+        <h1 class="view-title">ダッシュボード</h1>
+        <p class="view-sub">生産予定の完成で入庫、出荷で出庫。在庫を自動計算します。</p>
+      </div>
+      <div class="toolbar">
+        <button class="btn ghost" data-action="new-shipment">＋ 出荷を記録</button>
+        <button class="btn" data-action="new-production">＋ 生産予定を追加</button>
+      </div>
+    </div>
+
+    <div id="dash-banner"></div>
+
+    <div class="kpi-grid" id="kpi-grid"></div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>在庫アラート</h3>
+        <span class="count" id="alert-count"></span>
+      </div>
+      <div class="panel-body table-wrap" id="alert-table"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>直近の生産予定</h3>
+        <span class="count">完成予定が近い順（予定・製作中）</span>
+      </div>
+      <div class="panel-body table-wrap" id="upcoming-table"></div>
+    </div>
+  </section>
+
+  <!-- ===== Production ===== -->
+  <section class="view" id="view-production">
+    <div class="view-head">
+      <div>
+        <h1 class="view-title">生産予定</h1>
+        <p class="view-sub">予定 → 製作中 → 完成。「完成」にすると数量が在庫へ入庫されます。</p>
+      </div>
+      <div class="toolbar">
+        <select id="prod-filter">
+          <option value="all">すべての状態</option>
+          <option value="planned">予定</option>
+          <option value="in_progress">製作中</option>
+          <option value="done">完成</option>
+          <option value="canceled">中止</option>
+        </select>
+        <button class="btn" data-action="new-production">＋ 生産予定を追加</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-body table-wrap" id="production-table"></div>
+    </div>
+  </section>
+
+  <!-- ===== Shipments ===== -->
+  <section class="view" id="view-shipments">
+    <div class="view-head">
+      <div>
+        <h1 class="view-title">出荷記録</h1>
+        <p class="view-sub">出荷・販売を記録すると在庫から出庫されます。</p>
+      </div>
+      <div class="toolbar">
+        <button class="btn" data-action="new-shipment">＋ 出荷を記録</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-body table-wrap" id="shipments-table"></div>
+    </div>
+  </section>
+
+  <!-- ===== Inventory / Products ===== -->
+  <section class="view" id="view-inventory">
+    <div class="view-head">
+      <div>
+        <h1 class="view-title">在庫・製品マスタ</h1>
+        <p class="view-sub">現在庫＝完成数−出荷数。予測在庫＝現在庫＋入荷予定（予定・製作中）。</p>
+      </div>
+      <div class="toolbar">
+        <button class="btn ghost" data-action="export-csv">CSV出力</button>
+        <button class="btn" data-action="new-product">＋ 製品を追加</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-body table-wrap" id="inventory-table"></div>
+    </div>
+  </section>
+
+  <!-- ===== Data ===== -->
+  <section class="view" id="view-data">
+    <div class="view-head">
+      <div>
+        <h1 class="view-title">データ管理</h1>
+        <p class="view-sub">データはこの端末のブラウザ内（localStorage）に保存されます。</p>
+      </div>
+    </div>
+    <div class="panel panel-pad">
+      <h3 style="font-family:var(--serif);font-size:1.15rem;margin-bottom:10px;">バックアップ / 復元</h3>
+      <p class="hint" style="margin-bottom:16px;">
+        定期的にJSONを書き出して保管してください。別端末への移行や復旧時はJSONを読み込みます。
+      </p>
+      <div class="toolbar" style="margin-bottom:8px;">
+        <button class="btn ghost" data-action="export-json">JSONを書き出し</button>
+        <button class="btn ghost" data-action="import-json">JSONを読み込み</button>
+        <button class="btn ghost" data-action="export-csv">在庫CSVを書き出し</button>
+        <input type="file" id="import-file" accept="application/json,.json" hidden>
+      </div>
+    </div>
+    <div class="panel panel-pad">
+      <h3 style="font-family:var(--serif);font-size:1.15rem;margin-bottom:10px;">初期化</h3>
+      <p class="hint" style="margin-bottom:16px;">
+        現在のデータをすべて削除し、サンプル製品の初期状態に戻します。元に戻せません。
+      </p>
+      <div class="toolbar">
+        <button class="btn danger" data-action="reset">サンプル初期状態にリセット</button>
+        <button class="btn ghost danger" data-action="clear-all" style="color:var(--bad);border-color:rgba(168,69,59,0.3);background:transparent;">全データを削除</button>
+      </div>
+    </div>
+    <p class="foot-note">
+      Petit.Continue 在庫管理ツール · 有限会社松永工房 ·
+      <a href="index.html">ブランドサイトへ戻る</a>
+    </p>
+  </section>
+</main>
+
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+/* ────────────────────────────────────────────────
+   定数 / ユーティリティ
+──────────────────────────────────────────────── */
+const STORE_KEY = "matsunaga_inventory_v1";
+const CATEGORIES = ["ソファ", "チェア", "テーブル", "収納", "ミラー", "セット", "その他"];
+const STATUS = {
+  planned:     { label: "予定",   cls: "info" },
+  in_progress: { label: "製作中", cls: "warn" },
+  done:        { label: "完成",   cls: "ok" },
+  canceled:    { label: "中止",   cls: "neutral" },
+};
+
+const uid = () =>
+  (crypto.randomUUID ? crypto.randomUUID() : "id" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+const todayStr = () => new Date().toISOString().slice(0, 10);
+const num = (n) => (Number(n) || 0).toLocaleString("ja-JP");
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtDate = (d) => (d ? d.replace(/-/g, "/") : "—");
+
+/* ────────────────────────────────────────────────
+   シードデータ（ランディングページのコレクション）
+──────────────────────────────────────────────── */
+function seedState() {
+  const p = (name, category, safetyStock) => ({ id: uid(), name, category, safetyStock });
+  const products = [
+    p("プチ・カウチ", "ソファ", 3),
+    p("プチ・チェア", "チェア", 3),
+    p("プチ・ワードローブ", "収納", 2),
+    p("プチ・姿見", "ミラー", 2),
+    p("プチ・ダイニングテーブル", "テーブル", 2),
+    p("プチ・センターテーブル", "テーブル", 2),
+    p("プチルーム（セット）", "セット", 1),
+  ];
+  const id = (i) => products[i].id;
+  const today = new Date();
+  const day = (offset) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + offset);
+    return d.toISOString().slice(0, 10);
+  };
+  const production = [
+    { id: uid(), productId: id(0), qty: 6, dueDate: day(-20), status: "done",        completedDate: day(-18), note: "春ロット" },
+    { id: uid(), productId: id(1), qty: 8, dueDate: day(-16), status: "done",        completedDate: day(-15), note: "" },
+    { id: uid(), productId: id(2), qty: 3, dueDate: day(-12), status: "done",        completedDate: day(-11), note: "" },
+    { id: uid(), productId: id(4), qty: 4, dueDate: day(-9),  status: "done",        completedDate: day(-8),  note: "" },
+    { id: uid(), productId: id(5), qty: 5, dueDate: day(-6),  status: "done",        completedDate: day(-5),  note: "" },
+    { id: uid(), productId: id(0), qty: 4, dueDate: day(7),   status: "in_progress", completedDate: "",       note: "Dolpa向け" },
+    { id: uid(), productId: id(4), qty: 3, dueDate: day(12),  status: "planned",     completedDate: "",       note: "" },
+    { id: uid(), productId: id(3), qty: 2, dueDate: day(18),  status: "planned",     completedDate: "",       note: "イタリア仕様" },
+    { id: uid(), productId: id(6), qty: 1, dueDate: day(25),  status: "planned",     completedDate: "",       note: "受注品" },
+  ];
+  const shipments = [
+    { id: uid(), productId: id(0), qty: 4, date: day(-12), dest: "Etsy", note: "" },
+    { id: uid(), productId: id(1), qty: 3, date: day(-8),  dest: "Etsy", note: "" },
+    { id: uid(), productId: id(2), qty: 1, date: day(-5),  dest: "オンラインショップ", note: "" },
+    { id: uid(), productId: id(4), qty: 1, date: day(-3),  dest: "Etsy", note: "" },
+    { id: uid(), productId: id(5), qty: 2, date: day(-2),  dest: "オンラインショップ", note: "" },
+  ];
+  return { products, production, shipments };
+}
+
+/* ────────────────────────────────────────────────
+   状態の読み書き
+──────────────────────────────────────────────── */
+let state = load();
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (s && Array.isArray(s.products)) {
+        s.production = s.production || [];
+        s.shipments = s.shipments || [];
+        return s;
+      }
+    }
+  } catch (e) { /* fall through to seed */ }
+  const seeded = seedState();
+  save(seeded);
+  return seeded;
+}
+function save(s) {
+  localStorage.setItem(STORE_KEY, JSON.stringify(s || state));
+}
+
+/* ────────────────────────────────────────────────
+   在庫計算
+──────────────────────────────────────────────── */
+const productById = (id) => state.products.find((p) => p.id === id);
+
+function producedQty(pid) {
+  return state.production
+    .filter((r) => r.productId === pid && r.status === "done")
+    .reduce((s, r) => s + (Number(r.qty) || 0), 0);
+}
+function incomingQty(pid) {
+  return state.production
+    .filter((r) => r.productId === pid && (r.status === "planned" || r.status === "in_progress"))
+    .reduce((s, r) => s + (Number(r.qty) || 0), 0);
+}
+function shippedQty(pid) {
+  return state.shipments
+    .filter((r) => r.productId === pid)
+    .reduce((s, r) => s + (Number(r.qty) || 0), 0);
+}
+const currentStock = (pid) => producedQty(pid) - shippedQty(pid);
+const projectedStock = (pid) => currentStock(pid) + incomingQty(pid);
+
+function stockState(pid) {
+  const stock = currentStock(pid);
+  const safety = Number(productById(pid)?.safetyStock) || 0;
+  if (stock <= 0) return { key: "bad", label: "欠品" };
+  if (stock < safety) return { key: "warn", label: "要補充" };
+  return { key: "ok", label: "適正" };
+}
+
+/* ────────────────────────────────────────────────
+   レンダリング
+──────────────────────────────────────────────── */
+let activeView = "dashboard";
+
+function render() {
+  if (activeView === "dashboard") renderDashboard();
+  else if (activeView === "production") renderProduction();
+  else if (activeView === "shipments") renderShipments();
+  else if (activeView === "inventory") renderInventory();
+}
+
+function emptyRow(cols, msg) {
+  return `<div class="empty"><div class="empty-icon">◇</div>${esc(msg)}</div>`;
+}
+
+function renderDashboard() {
+  const totalStock = state.products.reduce((s, p) => s + Math.max(0, currentStock(p.id)), 0);
+  const alerts = state.products.filter((p) => stockState(p.id).key !== "ok");
+  const inProgressQty = state.production
+    .filter((r) => r.status === "in_progress")
+    .reduce((s, r) => s + (Number(r.qty) || 0), 0);
+
+  // Banner
+  const banner = document.getElementById("dash-banner");
+  if (alerts.length) {
+    banner.innerHTML =
+      `<div class="alert-banner">⚠ 在庫が不足している製品が <strong>&nbsp;${alerts.length}&nbsp;</strong> 件あります。生産予定をご確認ください。</div>`;
+  } else {
+    banner.innerHTML = `<div class="alert-banner none">✓ すべての製品が安全在庫を満たしています。</div>`;
+  }
+
+  // KPI
+  document.getElementById("kpi-grid").innerHTML = `
+    <div class="kpi">
+      <div class="kpi-label">登録製品数</div>
+      <div class="kpi-value">${num(state.products.length)}<small>品目</small></div>
+      <div class="kpi-note">マスタ登録された製品</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">総在庫数</div>
+      <div class="kpi-value">${num(totalStock)}<small>点</small></div>
+      <div class="kpi-note">出荷可能な現在庫の合計</div>
+    </div>
+    <div class="kpi ${alerts.length ? "alert" : ""}">
+      <div class="kpi-label">要対応</div>
+      <div class="kpi-value">${num(alerts.length)}<small>品目</small></div>
+      <div class="kpi-note">欠品・要補充の製品</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">製作中</div>
+      <div class="kpi-value">${num(inProgressQty)}<small>点</small></div>
+      <div class="kpi-note">完成すると入庫予定</div>
+    </div>`;
+
+  // Alert table
+  document.getElementById("alert-count").textContent = `${alerts.length} 件`;
+  const alertEl = document.getElementById("alert-table");
+  if (!alerts.length) {
+    alertEl.innerHTML = emptyRow(0, "在庫不足の製品はありません。");
+  } else {
+    const rows = alerts
+      .sort((a, b) => currentStock(a.id) - currentStock(b.id))
+      .map((p) => {
+        const st = stockState(p.id);
+        return `<tr>
+          <td><div class="prod-name">${esc(p.name)}</div><div class="prod-cat">${esc(p.category)}</div></td>
+          <td class="num strong-num">${num(currentStock(p.id))}</td>
+          <td class="num muted">${num(p.safetyStock)}</td>
+          <td class="num muted">${num(incomingQty(p.id))}</td>
+          <td class="center"><span class="badge ${st.key}">${st.label}</span></td>
+          <td class="row-actions"><button class="btn sm" data-action="new-production" data-pid="${p.id}">生産予定を追加</button></td>
+        </tr>`;
+      }).join("");
+    alertEl.innerHTML = `<table>
+      <thead><tr><th>製品</th><th class="num">現在庫</th><th class="num">安全在庫</th><th class="num">入荷予定</th><th class="center">状態</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+  }
+
+  // Upcoming production
+  const upcoming = state.production
+    .filter((r) => r.status === "planned" || r.status === "in_progress")
+    .sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"))
+    .slice(0, 8);
+  const upEl = document.getElementById("upcoming-table");
+  if (!upcoming.length) {
+    upEl.innerHTML = emptyRow(0, "予定されている生産はありません。");
+  } else {
+    const rows = upcoming.map((r) => {
+      const p = productById(r.productId);
+      const st = STATUS[r.status];
+      const overdue = r.dueDate && r.dueDate < todayStr() && r.status !== "done";
+      return `<tr>
+        <td>${esc(fmtDate(r.dueDate))} ${overdue ? '<span class="badge bad" style="margin-left:6px;">遅延</span>' : ""}</td>
+        <td><div class="prod-name">${esc(p ? p.name : "（削除済）")}</div></td>
+        <td class="num strong-num">${num(r.qty)}</td>
+        <td class="center"><span class="badge ${st.cls}">${st.label}</span></td>
+        <td class="muted">${esc(r.note || "")}</td>
+      </tr>`;
+    }).join("");
+    upEl.innerHTML = `<table>
+      <thead><tr><th>完成予定日</th><th>製品</th><th class="num">数量</th><th class="center">状態</th><th>メモ</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+  }
+}
+
+function renderProduction() {
+  const filter = document.getElementById("prod-filter").value;
+  let rows = [...state.production].sort((a, b) => (b.dueDate || "").localeCompare(a.dueDate || ""));
+  if (filter !== "all") rows = rows.filter((r) => r.status === filter);
+
+  const el = document.getElementById("production-table");
+  if (!rows.length) {
+    el.innerHTML = emptyRow(0, "該当する生産予定はありません。");
+    return;
+  }
+  const body = rows.map((r) => {
+    const p = productById(r.productId);
+    const st = STATUS[r.status];
+    const overdue = r.dueDate && r.dueDate < todayStr() && (r.status === "planned" || r.status === "in_progress");
+    const statusSelect = `<select data-action="set-status" data-id="${r.id}">
+      ${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${k === r.status ? "selected" : ""}>${v.label}</option>`).join("")}
+    </select>`;
+    return `<tr>
+      <td>${esc(fmtDate(r.dueDate))} ${overdue ? '<span class="badge bad" style="margin-left:6px;">遅延</span>' : ""}</td>
+      <td><div class="prod-name">${esc(p ? p.name : "（削除済）")}</div><div class="prod-cat">${esc(p ? p.category : "")}</div></td>
+      <td class="num strong-num">${num(r.qty)}</td>
+      <td class="center"><span class="badge ${st.cls}" style="margin-bottom:6px;">${st.label}</span><br>${statusSelect}</td>
+      <td>${r.status === "done" ? esc(fmtDate(r.completedDate)) : '<span class="muted">—</span>'}</td>
+      <td class="muted">${esc(r.note || "")}</td>
+      <td class="row-actions">
+        <button class="btn sm ghost" data-action="edit-production" data-id="${r.id}">編集</button>
+        <button class="btn sm ghost danger" data-action="delete-production" data-id="${r.id}" style="color:var(--bad);border-color:rgba(168,69,59,0.3);">削除</button>
+      </td>
+    </tr>`;
+  }).join("");
+  el.innerHTML = `<table>
+    <thead><tr><th>完成予定日</th><th>製品</th><th class="num">数量</th><th class="center">状態</th><th>完成日</th><th>メモ</th><th></th></tr></thead>
+    <tbody>${body}</tbody></table>`;
+}
+
+function renderShipments() {
+  const rows = [...state.shipments].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const el = document.getElementById("shipments-table");
+  if (!rows.length) {
+    el.innerHTML = emptyRow(0, "出荷記録はまだありません。");
+    return;
+  }
+  const body = rows.map((r) => {
+    const p = productById(r.productId);
+    return `<tr>
+      <td>${esc(fmtDate(r.date))}</td>
+      <td><div class="prod-name">${esc(p ? p.name : "（削除済）")}</div><div class="prod-cat">${esc(p ? p.category : "")}</div></td>
+      <td class="num strong-num">${num(r.qty)}</td>
+      <td>${esc(r.dest || "—")}</td>
+      <td class="muted">${esc(r.note || "")}</td>
+      <td class="row-actions">
+        <button class="btn sm ghost" data-action="edit-shipment" data-id="${r.id}">編集</button>
+        <button class="btn sm ghost danger" data-action="delete-shipment" data-id="${r.id}" style="color:var(--bad);border-color:rgba(168,69,59,0.3);">削除</button>
+      </td>
+    </tr>`;
+  }).join("");
+  el.innerHTML = `<table>
+    <thead><tr><th>出荷日</th><th>製品</th><th class="num">数量</th><th>出荷先</th><th>メモ</th><th></th></tr></thead>
+    <tbody>${body}</tbody></table>`;
+}
+
+function renderInventory() {
+  const el = document.getElementById("inventory-table");
+  if (!state.products.length) {
+    el.innerHTML = emptyRow(0, "製品が登録されていません。「＋ 製品を追加」から登録してください。");
+    return;
+  }
+  const rows = [...state.products]
+    .sort((a, b) => a.category.localeCompare(b.category, "ja") || a.name.localeCompare(b.name, "ja"))
+    .map((p) => {
+      const st = stockState(p.id);
+      return `<tr>
+        <td><div class="prod-name">${esc(p.name)}</div></td>
+        <td><span class="badge neutral">${esc(p.category)}</span></td>
+        <td class="num strong-num">${num(currentStock(p.id))}</td>
+        <td class="num muted">${num(p.safetyStock)}</td>
+        <td class="num muted">${num(incomingQty(p.id))}</td>
+        <td class="num">${num(projectedStock(p.id))}</td>
+        <td class="center"><span class="badge ${st.key}">${st.label}</span></td>
+        <td class="row-actions">
+          <button class="btn sm ghost" data-action="edit-product" data-id="${p.id}">編集</button>
+          <button class="btn sm ghost danger" data-action="delete-product" data-id="${p.id}" style="color:var(--bad);border-color:rgba(168,69,59,0.3);">削除</button>
+        </td>
+      </tr>`;
+    }).join("");
+  el.innerHTML = `<table>
+    <thead><tr>
+      <th>製品名</th><th>カテゴリ</th>
+      <th class="num">現在庫</th><th class="num">安全在庫</th>
+      <th class="num">入荷予定</th><th class="num">予測在庫</th>
+      <th class="center">状態</th><th></th>
+    </tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+/* ────────────────────────────────────────────────
+   モーダル
+──────────────────────────────────────────────── */
+const overlay = document.getElementById("modal-overlay");
+const modalEl = document.getElementById("modal");
+
+function openModal(html) {
+  modalEl.innerHTML = html;
+  overlay.classList.add("open");
+  const first = modalEl.querySelector("input, select, textarea");
+  if (first) setTimeout(() => first.focus(), 50);
+}
+function closeModal() {
+  overlay.classList.remove("open");
+  modalEl.innerHTML = "";
+}
+overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) closeModal(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && overlay.classList.contains("open")) closeModal(); });
+
+function productOptions(selected) {
+  return state.products
+    .map((p) => `<option value="${p.id}" ${p.id === selected ? "selected" : ""}>${esc(p.name)}</option>`)
+    .join("");
+}
+
+/* ── 製品フォーム ── */
+function openProductForm(id) {
+  const p = id ? productById(id) : null;
+  openModal(`
+    <div class="modal-head">
+      <h3>${p ? "製品を編集" : "製品を追加"}</h3>
+      <p>製品マスタの基本情報を登録します。</p>
+    </div>
+    <div class="modal-body">
+      <div class="field-group">
+        <label class="field">製品名 *</label>
+        <input type="text" id="f-name" value="${p ? esc(p.name) : ""}" placeholder="例：プチ・カウチ">
+      </div>
+      <div class="field-row">
+        <div class="field-group">
+          <label class="field">カテゴリ</label>
+          <select id="f-cat">${CATEGORIES.map((c) => `<option ${p && p.category === c ? "selected" : ""}>${c}</option>`).join("")}</select>
+        </div>
+        <div class="field-group">
+          <label class="field">安全在庫（最低在庫）</label>
+          <input type="number" id="f-safety" min="0" step="1" value="${p ? p.safetyStock : 2}">
+        </div>
+      </div>
+      <div class="form-error" id="f-err"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" data-action="close">キャンセル</button>
+      <button class="btn" data-action="save-product" data-id="${id || ""}">保存</button>
+    </div>`);
+}
+function saveProduct(id) {
+  const name = document.getElementById("f-name").value.trim();
+  const category = document.getElementById("f-cat").value;
+  const safetyStock = Math.max(0, parseInt(document.getElementById("f-safety").value, 10) || 0);
+  const err = document.getElementById("f-err");
+  if (!name) { err.textContent = "製品名を入力してください。"; return; }
+  if (id) {
+    const p = productById(id);
+    Object.assign(p, { name, category, safetyStock });
+    toast("製品を更新しました");
+  } else {
+    state.products.push({ id: uid(), name, category, safetyStock });
+    toast("製品を追加しました");
+  }
+  save(); closeModal(); render();
+}
+
+/* ── 生産予定フォーム ── */
+function openProductionForm(id, prefillPid) {
+  if (!state.products.length) { toast("先に製品を登録してください", true); switchView("inventory"); return; }
+  const r = id ? state.production.find((x) => x.id === id) : null;
+  const selPid = r ? r.productId : (prefillPid || state.products[0].id);
+  openModal(`
+    <div class="modal-head">
+      <h3>${r ? "生産予定を編集" : "生産予定を追加"}</h3>
+      <p>「完成」にすると数量が在庫へ入庫されます。</p>
+    </div>
+    <div class="modal-body">
+      <div class="field-group">
+        <label class="field">製品 *</label>
+        <select id="f-pid">${productOptions(selPid)}</select>
+      </div>
+      <div class="field-row">
+        <div class="field-group">
+          <label class="field">数量 *</label>
+          <input type="number" id="f-qty" min="1" step="1" value="${r ? r.qty : 1}">
+        </div>
+        <div class="field-group">
+          <label class="field">完成予定日</label>
+          <input type="date" id="f-due" value="${r ? esc(r.dueDate) : todayStr()}">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field-group">
+          <label class="field">状態</label>
+          <select id="f-status">${Object.entries(STATUS).map(([k, v]) => `<option value="${k}" ${r && r.status === k ? "selected" : ""}>${v.label}</option>`).join("")}</select>
+        </div>
+        <div class="field-group">
+          <label class="field">完成日（完成時）</label>
+          <input type="date" id="f-completed" value="${r ? esc(r.completedDate || "") : ""}">
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field">メモ</label>
+        <input type="text" id="f-note" value="${r ? esc(r.note || "") : ""}" placeholder="例：Dolpa向けロット">
+      </div>
+      <div class="form-error" id="f-err"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" data-action="close">キャンセル</button>
+      <button class="btn" data-action="save-production" data-id="${id || ""}">保存</button>
+    </div>`);
+}
+function saveProduction(id) {
+  const productId = document.getElementById("f-pid").value;
+  const qty = parseInt(document.getElementById("f-qty").value, 10) || 0;
+  const dueDate = document.getElementById("f-due").value;
+  const status = document.getElementById("f-status").value;
+  let completedDate = document.getElementById("f-completed").value;
+  const note = document.getElementById("f-note").value.trim();
+  const err = document.getElementById("f-err");
+  if (qty < 1) { err.textContent = "数量は1以上で入力してください。"; return; }
+  if (status === "done" && !completedDate) completedDate = todayStr();
+  if (status !== "done") completedDate = "";
+  if (id) {
+    const r = state.production.find((x) => x.id === id);
+    Object.assign(r, { productId, qty, dueDate, status, completedDate, note });
+    toast("生産予定を更新しました");
+  } else {
+    state.production.push({ id: uid(), productId, qty, dueDate, status, completedDate, note });
+    toast("生産予定を追加しました");
+  }
+  save(); closeModal(); render();
+}
+
+/* ── 出荷フォーム ── */
+function openShipmentForm(id) {
+  if (!state.products.length) { toast("先に製品を登録してください", true); switchView("inventory"); return; }
+  const r = id ? state.shipments.find((x) => x.id === id) : null;
+  const selPid = r ? r.productId : state.products[0].id;
+  openModal(`
+    <div class="modal-head">
+      <h3>${r ? "出荷記録を編集" : "出荷を記録"}</h3>
+      <p>記録すると数量が在庫から出庫されます。</p>
+    </div>
+    <div class="modal-body">
+      <div class="field-group">
+        <label class="field">製品 *</label>
+        <select id="f-pid">${productOptions(selPid)}</select>
+      </div>
+      <div class="field-row">
+        <div class="field-group">
+          <label class="field">数量 *</label>
+          <input type="number" id="f-qty" min="1" step="1" value="${r ? r.qty : 1}">
+        </div>
+        <div class="field-group">
+          <label class="field">出荷日</label>
+          <input type="date" id="f-date" value="${r ? esc(r.date) : todayStr()}">
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field">出荷先</label>
+        <input type="text" id="f-dest" value="${r ? esc(r.dest || "") : ""}" placeholder="例：Etsy / オンラインショップ">
+      </div>
+      <div class="field-group">
+        <label class="field">メモ</label>
+        <input type="text" id="f-note" value="${r ? esc(r.note || "") : ""}">
+      </div>
+      <div class="form-error" id="f-err"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" data-action="close">キャンセル</button>
+      <button class="btn" data-action="save-shipment" data-id="${id || ""}">保存</button>
+    </div>`);
+}
+function saveShipment(id) {
+  const productId = document.getElementById("f-pid").value;
+  const qty = parseInt(document.getElementById("f-qty").value, 10) || 0;
+  const date = document.getElementById("f-date").value;
+  const dest = document.getElementById("f-dest").value.trim();
+  const note = document.getElementById("f-note").value.trim();
+  const err = document.getElementById("f-err");
+  if (qty < 1) { err.textContent = "数量は1以上で入力してください。"; return; }
+  const available = currentStock(productId) + (id ? (state.shipments.find((x) => x.id === id)?.qty || 0) : 0);
+  if (qty > available) {
+    err.textContent = `現在庫（${num(available)}点）を超える出荷です。生産予定の完成を先に登録してください。`;
+    return;
+  }
+  if (id) {
+    const r = state.shipments.find((x) => x.id === id);
+    Object.assign(r, { productId, qty, date, dest, note });
+    toast("出荷記録を更新しました");
+  } else {
+    state.shipments.push({ id: uid(), productId, qty, date, dest, note });
+    toast("出荷を記録しました");
+  }
+  save(); closeModal(); render();
+}
+
+/* ── 確認モーダル ── */
+function confirmModal(title, msg, onYes, yesLabel = "削除") {
+  openModal(`
+    <div class="modal-head"><h3>${esc(title)}</h3></div>
+    <div class="modal-body"><p class="hint">${esc(msg)}</p></div>
+    <div class="modal-foot">
+      <button class="btn ghost" data-action="close">キャンセル</button>
+      <button class="btn danger" id="confirm-yes">${esc(yesLabel)}</button>
+    </div>`);
+  document.getElementById("confirm-yes").addEventListener("click", () => { onYes(); closeModal(); });
+}
+
+/* ────────────────────────────────────────────────
+   データ入出力
+──────────────────────────────────────────────── */
+function download(filename, text, type = "application/json") {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+function exportJSON() {
+  download(`petit-continue-inventory-${todayStr()}.json`, JSON.stringify(state, null, 2));
+  toast("JSONを書き出しました");
+}
+function exportCSV() {
+  const header = ["製品名", "カテゴリ", "現在庫", "安全在庫", "入荷予定", "予測在庫", "状態"];
+  const lines = state.products.map((p) => {
+    const st = stockState(p.id);
+    return [p.name, p.category, currentStock(p.id), p.safetyStock, incomingQty(p.id), projectedStock(p.id), st.label]
+      .map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",");
+  });
+  download(`petit-continue-stock-${todayStr()}.csv`, "﻿" + [header.join(","), ...lines].join("\r\n"), "text/csv");
+  toast("在庫CSVを書き出しました");
+}
+function importJSON(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (!data || !Array.isArray(data.products)) throw new Error("形式が不正です");
+      state = { products: data.products, production: data.production || [], shipments: data.shipments || [] };
+      save(); render(); toast("データを読み込みました");
+    } catch (e) {
+      toast("読み込みに失敗しました：" + e.message, true);
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ────────────────────────────────────────────────
+   トースト
+──────────────────────────────────────────────── */
+let toastTimer;
+function toast(msg, isErr = false) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast show" + (isErr ? " err" : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = "toast" + (isErr ? " err" : ""); }, 2600);
+}
+
+/* ────────────────────────────────────────────────
+   ビュー切替
+──────────────────────────────────────────────── */
+function switchView(view) {
+  activeView = view;
+  document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+  document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + view));
+  render();
+}
+document.getElementById("tabs").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-view]");
+  if (b) switchView(b.dataset.view);
+});
+document.getElementById("prod-filter").addEventListener("change", renderProduction);
+
+/* ────────────────────────────────────────────────
+   アクション（イベント委譲）
+──────────────────────────────────────────────── */
+document.body.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-action]");
+  if (!el) return;
+  const a = el.dataset.action;
+  const id = el.dataset.id || "";
+  const pid = el.dataset.pid || "";
+
+  switch (a) {
+    case "close": closeModal(); break;
+    case "new-product": openProductForm(); break;
+    case "edit-product": openProductForm(id); break;
+    case "save-product": saveProduct(id); break;
+    case "delete-product": {
+      const p = productById(id);
+      const used = state.production.some((r) => r.productId === id) || state.shipments.some((r) => r.productId === id);
+      const msg = used
+        ? `「${p.name}」には生産予定・出荷記録が紐づいています。製品を削除すると、それらの記録も削除されます。よろしいですか？`
+        : `「${p.name}」を削除します。よろしいですか？`;
+      confirmModal("製品を削除", msg, () => {
+        state.products = state.products.filter((x) => x.id !== id);
+        state.production = state.production.filter((r) => r.productId !== id);
+        state.shipments = state.shipments.filter((r) => r.productId !== id);
+        save(); render(); toast("製品を削除しました");
+      });
+      break;
+    }
+    case "new-production": openProductionForm(null, pid); break;
+    case "edit-production": openProductionForm(id); break;
+    case "save-production": saveProduction(id); break;
+    case "delete-production":
+      confirmModal("生産予定を削除", "この生産予定を削除します。完成済みの場合は在庫からも差し引かれます。よろしいですか？", () => {
+        state.production = state.production.filter((x) => x.id !== id);
+        save(); render(); toast("生産予定を削除しました");
+      });
+      break;
+    case "new-shipment": openShipmentForm(); break;
+    case "edit-shipment": openShipmentForm(id); break;
+    case "save-shipment": saveShipment(id); break;
+    case "delete-shipment":
+      confirmModal("出荷記録を削除", "この出荷記録を削除します。在庫に数量が戻ります。よろしいですか？", () => {
+        state.shipments = state.shipments.filter((x) => x.id !== id);
+        save(); render(); toast("出荷記録を削除しました");
+      });
+      break;
+    case "export-json": exportJSON(); break;
+    case "export-csv": exportCSV(); break;
+    case "import-json": document.getElementById("import-file").click(); break;
+    case "reset":
+      confirmModal("初期状態にリセット", "現在のデータをすべて削除し、サンプル製品の初期状態に戻します。元に戻せません。", () => {
+        state = seedState(); save(); render(); toast("初期状態にリセットしました");
+      }, "リセット");
+      break;
+    case "clear-all":
+      confirmModal("全データを削除", "すべての製品・生産予定・出荷記録を削除します。元に戻せません。", () => {
+        state = { products: [], production: [], shipments: [] };
+        save(); render(); toast("全データを削除しました");
+      }, "削除");
+      break;
+  }
+});
+
+/* 状態変更セレクト（生産予定テーブル） */
+document.body.addEventListener("change", (e) => {
+  const sel = e.target.closest('select[data-action="set-status"]');
+  if (!sel) return;
+  const r = state.production.find((x) => x.id === sel.dataset.id);
+  if (!r) return;
+  r.status = sel.value;
+  if (r.status === "done" && !r.completedDate) r.completedDate = todayStr();
+  if (r.status !== "done") r.completedDate = "";
+  save(); render();
+  toast("状態を「" + STATUS[r.status].label + "」に変更しました");
+});
+
+document.getElementById("import-file").addEventListener("change", (e) => {
+  if (e.target.files[0]) importJSON(e.target.files[0]);
+  e.target.value = "";
+});
+
+/* 起動 */
+render();
+</script>
+</body>
+</html>

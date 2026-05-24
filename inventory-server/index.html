@@ -748,26 +748,44 @@ const destDatalist = () => `<datalist id="dest-options">${state.destinations.map
 function openProductForm(id) {
   const p = id ? productById(id) : null;
   openModal(`
-    <div class="modal-head"><h3>${p ? "製品を編集" : "製品を追加"}</h3><p>製品マスタの基本情報。登録した製品名は生産予定でプルダウン選択できます。</p></div>
+    <div class="modal-head"><h3>${p ? "製品を編集" : "製品を追加"}</h3><p>製品マスタの基本情報。あわせて在庫（木地／塗装済）も登録できます。</p></div>
     <div class="modal-body">
       <div class="field-group"><label class="field">製品名 *</label><input type="text" id="f-name" value="${p ? esc(p.name) : ""}" placeholder="例：Caシリーズ"></div>
       <div class="field-row">
         <div class="field-group"><label class="field">カテゴリ</label><select id="f-cat">${categoryOptions(p ? p.category : "")}</select></div>
         <div class="field-group"><label class="field">安全在庫（完成在庫の最低ライン）</label><input type="number" id="f-safety" min="0" step="1" value="${p ? p.safetyStock : 0}"></div>
       </div>
+      <div style="border-top:1px solid var(--line-soft);margin:6px 0 14px;padding-top:14px;">
+        <label class="field" style="font-weight:500;color:var(--gold-dark);">在庫を登録（任意・数量0なら登録しません）</label>
+        <div class="field-row">
+          <div class="field-group"><label class="field">在庫の種類</label><select id="f-stocktype"><option value="kiji">木地在庫</option><option value="painted">塗装済在庫</option></select></div>
+          <div class="field-group"><label class="field">数量</label><input type="number" id="f-stockqty" min="0" step="1" value="0"></div>
+        </div>
+        <div class="field-group" id="f-stockcolor-row" style="display:none;"><label class="field">カラー（塗装済・任意）</label><select id="f-stockcolor">${colorOptions("")}</select></div>
+      </div>
       <div class="form-error" id="f-err"></div>
     </div>
     <div class="modal-foot"><button class="btn ghost" data-action="close">キャンセル</button><button class="btn" data-action="save-product" data-id="${id || ""}">保存</button></div>`);
+  const stockType = document.getElementById("f-stocktype");
+  stockType.addEventListener("change", () => {
+    document.getElementById("f-stockcolor-row").style.display = stockType.value === "painted" ? "" : "none";
+  });
 }
 async function saveProduct(id) {
   const name = document.getElementById("f-name").value.trim();
   const category = document.getElementById("f-cat").value;
   const safetyStock = Math.max(0, parseInt(document.getElementById("f-safety").value, 10) || 0);
+  const stockType = document.getElementById("f-stocktype").value;
+  const stockQty = Math.max(0, parseInt(document.getElementById("f-stockqty").value, 10) || 0);
+  const stockColor = document.getElementById("f-stockcolor").value;
   const err = document.getElementById("f-err");
   if (!name) { err.textContent = "製品名を入力してください。"; return; }
+  const payload = { id: id || undefined, name, category, safetyStock };
+  if (stockQty > 0) payload.initStock = { type: stockType, qty: stockQty, color: stockType === "painted" ? stockColor : "" };
   try {
-    const d = await api("save_product", { id: id || undefined, name, category, safetyStock });
-    state = d.state; closeModal(); render(); toast(id ? "製品を更新しました" : "製品を追加しました");
+    const d = await api("save_product", payload);
+    state = d.state; closeModal(); render();
+    toast(stockQty > 0 ? "製品と在庫を登録しました" : (id ? "製品を更新しました" : "製品を追加しました"));
   } catch (e) { err.textContent = e.message; }
 }
 

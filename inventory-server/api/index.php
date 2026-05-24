@@ -88,6 +88,21 @@ try {
             ->execute([$id, $name, $category, $safety, now(), now()]);
         audit($u, 'create', 'product', $id, "製品を追加: {$name}");
       }
+      $init = $b['initStock'] ?? null;
+      if (is_array($init)) {
+        $itype = $init['type'] ?? '';
+        $iqty = (int)($init['qty'] ?? 0);
+        $icolor = $itype === 'painted' ? trim($init['color'] ?? '') : '';
+        if ($iqty > 0 && in_array($itype, ['kiji', 'painted'], true)) {
+          $lot = ['status' => $itype, 'kiji_date' => '', 'painted_date' => '', 'shipped_date' => ''];
+          stamp_dates($lot);
+          $lid = uuid();
+          $pdo->prepare('INSERT INTO lots (id, product_id, lot_no, qty, due_date, status, color, dest, note, kiji_date, painted_date, shipped_date, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+              ->execute([$lid, $id, '', $iqty, date('Y-m-d'), $itype, $icolor, '', 'マスタから在庫登録', $lot['kiji_date'], $lot['painted_date'], $lot['shipped_date'], now(), now()]);
+          $label = $itype === 'kiji' ? '木地' : '塗装済';
+          audit($u, 'create', 'lot', $lid, "在庫を登録: {$name} {$label}×{$iqty}" . ($icolor ? "（{$icolor}）" : ''));
+        }
+      }
       json_out(['state' => get_state($u)]);
     }
 

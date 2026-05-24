@@ -67,16 +67,44 @@ function map_lot(array $r): array {
   ];
 }
 
+function map_loss(array $r): array {
+  return [
+    'id' => $r['id'], 'productId' => $r['product_id'], 'bucket' => $r['bucket'],
+    'qty' => (int)$r['qty'], 'color' => $r['color'] ?? '', 'lossDate' => $r['loss_date'] ?? '',
+    'reason' => $r['reason'] ?? '', 'createdBy' => $r['created_by'] ?? '',
+  ];
+}
+
 function get_state(array $user): array {
   $pdo = db();
   $products = array_map('map_product', $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll());
   $lots = array_map('map_lot', $pdo->query('SELECT * FROM lots')->fetchAll());
+  $losses = array_map('map_loss', $pdo->query('SELECT * FROM losses ORDER BY loss_date DESC, created_at DESC')->fetchAll());
   $destinations = array_map(fn($r) => $r['name'], $pdo->query('SELECT name FROM destinations ORDER BY name')->fetchAll());
   $users = [];
   if ($user['role'] === 'editor') {
     $users = $pdo->query('SELECT id, email, name, role FROM users ORDER BY created_at')->fetchAll();
   }
-  return ['products' => $products, 'lots' => $lots, 'destinations' => $destinations, 'users' => $users];
+  return ['products' => $products, 'lots' => $lots, 'losses' => $losses, 'destinations' => $destinations, 'users' => $users];
+}
+
+/* バケット（kiji/painted）の現在の利用可能在庫 = ロット合計 − 破損合計 */
+function bucket_available(string $pid, string $bucket): int {
+  $pdo = db();
+  $a = $pdo->prepare('SELECT COALESCE(SUM(qty),0) s FROM lots WHERE product_id=? AND status=?');
+  $a->execute([$pid, $bucket]);
+  $b = $pdo->prepare('SELECT COALESCE(SUM(qty),0) s FROM losses WHERE product_id=? AND bucket=?');
+  $b->execute([$pid, $bucket]);
+  return (int)$a->fetch()['s'] - (int)$b->fetch()['s'];
+}
+/* 完成在庫の特定カラーの利用可能数 */
+function color_available(string $pid, string $color): int {
+  $pdo = db();
+  $a = $pdo->prepare("SELECT COALESCE(SUM(qty),0) s FROM lots WHERE product_id=? AND status='painted' AND color=?");
+  $a->execute([$pid, $color]);
+  $b = $pdo->prepare("SELECT COALESCE(SUM(qty),0) s FROM losses WHERE product_id=? AND bucket='painted' AND color=?");
+  $b->execute([$pid, $color]);
+  return (int)$a->fetch()['s'] - (int)$b->fetch()['s'];
 }
 
 /* ── ヘルパ ── */

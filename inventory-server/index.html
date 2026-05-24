@@ -414,7 +414,7 @@ async function api(action, payload, method) {
 }
 
 /* ──────────────── 状態 ──────────────── */
-const emptyState = () => ({ products: [], lots: [], destinations: [], users: [] });
+const emptyState = () => ({ products: [], lots: [], losses: [], destinations: [], users: [] });
 let state = emptyState();
 let me = null;
 async function refresh() { const d = await api("state"); state = d.state; render(); }
@@ -501,10 +501,12 @@ async function enterApp() {
 /* ──────────────── 在庫計算 ──────────────── */
 const productById = (id) => state.products.find((p) => p.id === id);
 const sumLots = (pid, st) => state.lots.filter((l) => l.productId === pid && l.status === st).reduce((s, l) => s + (Number(l.qty) || 0), 0);
-const rawStock = (pid) => sumLots(pid, "kiji");
-const finishedStock = (pid) => sumLots(pid, "painted");
+const sumLosses = (pid, bucket) => (state.losses || []).filter((x) => x.productId === pid && x.bucket === bucket).reduce((s, x) => s + (Number(x.qty) || 0), 0);
+const rawStock = (pid) => sumLots(pid, "kiji") - sumLosses(pid, "kiji");
+const finishedStock = (pid) => sumLots(pid, "painted") - sumLosses(pid, "painted");
 const plannedQty = (pid) => sumLots(pid, "planned");
 const shippedQty = (pid) => sumLots(pid, "shipped");
+const lossQty = (pid) => sumLosses(pid, "kiji") + sumLosses(pid, "painted");
 const projectedStock = (pid) => rawStock(pid) + finishedStock(pid) + plannedQty(pid);
 
 function finishedByColor(pid) {
@@ -512,6 +514,10 @@ function finishedByColor(pid) {
   state.lots.filter((l) => l.productId === pid && l.status === "painted").forEach((l) => {
     const c = l.color || "（無）"; m[c] = (m[c] || 0) + (Number(l.qty) || 0);
   });
+  (state.losses || []).filter((x) => x.productId === pid && x.bucket === "painted").forEach((x) => {
+    const c = x.color || "（無）"; m[c] = (m[c] || 0) - (Number(x.qty) || 0);
+  });
+  Object.keys(m).forEach((c) => { if (m[c] <= 0) delete m[c]; });
   return m;
 }
 function stockState(pid) {
@@ -532,8 +538,8 @@ function render() {
   else if (activeView === "users") renderUsers();
   else if (activeView === "audit") renderAudit();
 }
-const AUDIT_ACTION = { create: { l: "追加", c: "ok" }, update: { l: "編集", c: "info" }, delete: { l: "削除", c: "bad" }, status: { l: "状態変更", c: "warn" }, reset: { l: "リセット", c: "bad" }, clear: { l: "全消去", c: "bad" }, import: { l: "取込", c: "info" } };
-const ENTITY_LABEL = { product: "製品", lot: "生産予定", user: "ユーザー", system: "システム" };
+const AUDIT_ACTION = { create: { l: "追加", c: "ok" }, update: { l: "編集", c: "info" }, delete: { l: "削除", c: "bad" }, status: { l: "状態変更", c: "warn" }, loss: { l: "破損/ロス", c: "bad" }, reset: { l: "リセット", c: "bad" }, clear: { l: "全消去", c: "bad" }, import: { l: "取込", c: "info" } };
+const ENTITY_LABEL = { product: "製品", lot: "生産予定", loss: "破損", user: "ユーザー", system: "システム" };
 async function renderAudit() {
   const el = document.getElementById("audit-table");
   if (!isEditor()) { el.innerHTML = emptyMsg("編集権限が必要です。"); return; }
@@ -702,7 +708,7 @@ function renderInventory() {
         <td class="num">${num(projectedStock(p.id))}</td>
         <td class="center"><span class="badge ${st.key}">${st.label}</span></td>
         <td class="center"><button class="btn sm ghost" data-action="product-detail" data-id="${p.id}">明細</button></td>
-        ${canEdit ? `<td class="row-actions"><button class="btn sm ghost" data-action="edit-product" data-id="${p.id}">編集</button><button class="btn sm ghost danger" data-action="delete-product" data-id="${p.id}">削除</button></td>` : ""}
+        ${canEdit ? `<td class="row-actions"><button class="btn sm ghost" data-action="new-loss" data-id="${p.id}">破損</button><button class="btn sm ghost" data-action="edit-product" data-id="${p.id}">編集</button><button class="btn sm ghost danger" data-action="delete-product" data-id="${p.id}">削除</button></td>` : ""}
       </tr>`;
     }).join("");
     return head + rows;
@@ -870,6 +876,8 @@ function openProductDetail(pid) {
   const lots = state.lots.filter((l) => l.productId === pid)
     .sort((a, b) => (b.dueDate || "").localeCompare(a.dueDate || ""));
   const st = stockState(pid);
+  const losses = (state.losses || []).filter((x) => x.productId === pid)
+    .sort((a, b) => (b.lossDate || "").localeCompare(a.lossDate || ""));
   const meta = `<div class="detail-meta">
     <span>カテゴリ <b>${esc(p.category || "未分類")}</b></span>
     <span>木地在庫 <b>${num(rawStock(pid))}</b></span>
@@ -877,6 +885,7 @@ function openProductDetail(pid) {
     <span>安全在庫 <b>${num(p.safetyStock)}</b></span>
     <span>予定 <b>${num(plannedQty(pid))}</b></span>
     <span>予測在庫 <b>${num(projectedStock(pid))}</b></span>
+    ${lossQty(pid) ? `<span>破損計 <b style="color:var(--bad)">${num(lossQty(pid))}</b></span>` : ""}
     <span>状態 <span class="badge ${st.key}">${st.label}</span></span>
   </div>`;
   let table;
@@ -900,12 +909,64 @@ function openProductDetail(pid) {
     }).join("");
     table = `<div class="table-wrap"><table><thead><tr><th>ロット番号</th><th class="num">数量</th><th class="center">状態</th><th>カラー</th><th>完成予定日</th><th>木地完成日</th><th>塗装済日</th><th>出荷日</th><th>出荷先</th><th>メモ</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
+  let lossTable = "";
+  if (losses.length) {
+    const lrows = losses.map((x) => `<tr>
+      <td>${esc(fmtDate(x.lossDate))}</td>
+      <td><span class="chip">${x.bucket === "kiji" ? "木地在庫" : "完成在庫"}</span></td>
+      <td class="num strong-num" style="color:var(--bad)">−${num(x.qty)}</td>
+      <td>${x.color ? `<span class="chip">${esc(x.color)}</span>` : '<span class="muted">—</span>'}</td>
+      <td class="muted">${esc(x.reason || "")}</td>
+      <td class="muted">${esc(x.createdBy || "")}</td>
+      ${isEditor() ? `<td class="row-actions"><button class="btn sm ghost danger" data-action="del-loss" data-id="${x.id}" data-pid="${pid}">取消</button></td>` : ""}
+    </tr>`).join("");
+    lossTable = `<h4 style="font-family:var(--serif);font-size:1.05rem;margin:18px 0 8px;color:var(--bad);">破損・ロス記録</h4>
+      <div class="table-wrap"><table><thead><tr><th>日付</th><th>対象在庫</th><th class="num">数量</th><th>カラー</th><th>理由・段階</th><th>記録者</th>${isEditor() ? "<th></th>" : ""}</tr></thead><tbody>${lrows}</tbody></table></div>`;
+  }
   modalEl.innerHTML = `
     <div class="modal-head"><h3>${esc(p.name)}</h3><p>ロット番号ごとの明細（完成予定日の新しい順）</p></div>
-    <div class="modal-body">${meta}${table}</div>
-    <div class="modal-foot">${isEditor() ? `<button class="btn ghost" data-action="new-lot" data-pid="${pid}">＋ 生産予定を追加</button>` : ""}<button class="btn" data-action="close">閉じる</button></div>`;
+    <div class="modal-body">${meta}${table}${lossTable}</div>
+    <div class="modal-foot">${isEditor() ? `<button class="btn ghost danger" data-action="new-loss" data-id="${pid}">破損で減らす</button><button class="btn ghost" data-action="new-lot" data-pid="${pid}">＋ 生産予定を追加</button>` : ""}<button class="btn" data-action="close">閉じる</button></div>`;
   modalEl.style.maxWidth = "860px";
   overlay.classList.add("open");
+}
+
+/* 破損・ロスフォーム */
+function openLossForm(pid) {
+  const p = productById(pid);
+  if (!p) return;
+  openModal(`
+    <div class="modal-head"><h3>破損・ロスで在庫を減らす</h3><p>${esc(p.name)} の在庫を、破損などの理由で減らします（出荷とは別管理）。</p></div>
+    <div class="modal-body">
+      <div class="field-row">
+        <div class="field-group"><label class="field">減らす在庫 *</label><select id="ls-bucket"><option value="kiji">木地在庫（現在 ${num(rawStock(pid))}）</option><option value="painted">完成在庫・塗装済（現在 ${num(finishedStock(pid))}）</option></select></div>
+        <div class="field-group"><label class="field">数量 *</label><input type="number" id="ls-qty" min="1" step="1" value="1"></div>
+      </div>
+      <div class="field-group" id="ls-color-row" style="display:none;"><label class="field">カラー（完成在庫の場合・任意）</label><select id="ls-color">${colorOptions("")}</select></div>
+      <div class="field-row">
+        <div class="field-group"><label class="field">日付</label><input type="date" id="ls-date" value="${todayStr()}"></div>
+        <div class="field-group"><label class="field">理由・段階</label><input type="text" id="ls-reason" placeholder="例：塗装中に破損 / 出荷前まとめで破損"></div>
+      </div>
+      <div class="form-error" id="ls-err"></div>
+    </div>
+    <div class="modal-foot"><button class="btn ghost" data-action="close">キャンセル</button><button class="btn danger" data-action="save-loss" data-id="${pid}">在庫を減らす</button></div>`);
+  const bucket = document.getElementById("ls-bucket");
+  bucket.addEventListener("change", () => {
+    document.getElementById("ls-color-row").style.display = bucket.value === "painted" ? "" : "none";
+  });
+}
+async function saveLoss(pid) {
+  const bucket = document.getElementById("ls-bucket").value;
+  const qty = parseInt(document.getElementById("ls-qty").value, 10) || 0;
+  const color = bucket === "painted" ? document.getElementById("ls-color").value : "";
+  const lossDate = document.getElementById("ls-date").value;
+  const reason = document.getElementById("ls-reason").value.trim();
+  const err = document.getElementById("ls-err");
+  if (qty < 1) { err.textContent = "数量は1以上で入力してください。"; return; }
+  try {
+    const d = await api("record_loss", { productId: pid, bucket, qty, color, lossDate, reason });
+    state = d.state; closeModal(); render(); toast("破損・ロスを記録しました");
+  } catch (e) { err.textContent = e.message; }
 }
 
 /* ユーザーフォーム */
@@ -1004,6 +1065,7 @@ document.getElementById("inv-filter").addEventListener("change", renderInventory
 const EDITOR_ACTIONS = new Set([
   "new-product", "edit-product", "save-product", "delete-product",
   "new-lot", "edit-lot", "save-lot", "delete-lot",
+  "new-loss", "save-loss", "del-loss",
   "new-user", "edit-user", "save-user", "delete-user",
   "export-json", "import-json", "reset", "clear-all",
 ]);
@@ -1034,6 +1096,12 @@ document.body.addEventListener("click", (e) => {
     case "delete-lot":
       confirmModal("生産予定を削除", "このロットを削除します。在庫からも差し引かれます。よろしいですか？",
         async () => { const d = await api("delete_lot", { id }); state = d.state; closeModal(); render(); toast("削除しました"); });
+      break;
+    case "new-loss": openLossForm(id); break;
+    case "save-loss": saveLoss(id); break;
+    case "del-loss":
+      confirmModal("破損記録を取消", "この破損・ロス記録を取り消します（在庫が戻ります）。よろしいですか？",
+        async () => { const d = await api("delete_loss", { id }); state = d.state; closeModal(); render(); toast("破損記録を取り消しました"); if (pid) openProductDetail(pid); });
       break;
     case "new-user": openUserForm(); break;
     case "edit-user": openUserForm(id); break;

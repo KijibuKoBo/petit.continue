@@ -76,6 +76,9 @@ try {
       $safety = max(0, (int)($b['safetyStock'] ?? 0));
       if ($name === '') fail('製品名を入力してください。');
       $id = $b['id'] ?? '';
+      $dup = $pdo->prepare('SELECT id FROM products WHERE LOWER(name)=LOWER(?) AND id<>?');
+      $dup->execute([$name, $id]);
+      if ($dup->fetch()) fail('同じ名前の製品が既に登録されています。');
       if ($id) {
         $p = product_by_id($id);
         if (!$p) fail('対象の製品が見つかりません。');
@@ -112,6 +115,7 @@ try {
       $p = product_by_id($id);
       if (!$p) fail('対象の製品が見つかりません。');
       $pdo->prepare('DELETE FROM lots WHERE product_id = ?')->execute([$id]);
+      $pdo->prepare('DELETE FROM losses WHERE product_id = ?')->execute([$id]);
       $pdo->prepare('DELETE FROM products WHERE id = ?')->execute([$id]);
       audit($u, 'delete', 'product', $id, '製品を削除: ' . $p['name']);
       json_out(['state' => get_state($u)]);
@@ -201,6 +205,49 @@ try {
       json_out(['state' => get_state($u)]);
     }
 
+    /* ── 破損・ロス ── */
+    case 'record_loss': {
+      $u = require_editor();
+      $b = body();
+      $pid = $b['productId'] ?? '';
+      $bucket = $b['bucket'] ?? '';
+      $qty = (int)($b['qty'] ?? 0);
+      $color = $bucket === 'painted' ? trim($b['color'] ?? '') : '';
+      $lossDate = trim($b['lossDate'] ?? '') ?: date('Y-m-d');
+      $reason = trim($b['reason'] ?? '');
+      $p = product_by_id($pid);
+      if (!$p) fail('対象の製品が見つかりません。');
+      if (!in_array($bucket, ['kiji', 'painted'], true)) fail('在庫の種類が不正です。');
+      if ($qty < 1) fail('数量は1以上で入力してください。');
+      $bucketLabel = $bucket === 'kiji' ? '木地在庫' : '完成在庫';
+      if ($color !== '') {
+        $avail = color_available($pid, $color);
+        if ($qty > $avail) fail("完成在庫（{$color}）の残数は {$avail} です。それを超えて減らせません。");
+      } else {
+        $avail = bucket_available($pid, $bucket);
+        if ($qty > $avail) fail("{$bucketLabel}の残数は {$avail} です。それを超えて減らせません。");
+      }
+      $lid = uuid();
+      $pdo->prepare('INSERT INTO losses (id, product_id, bucket, qty, color, loss_date, reason, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)')
+          ->execute([$lid, $pid, $bucket, $qty, $color, $lossDate, $reason, $u['email'], now()]);
+      audit($u, 'loss', 'loss', $lid, "破損/ロス: {$p['name']} {$bucketLabel}×{$qty}" . ($color ? "（{$color}）" : '') . ($reason ? " ／ {$reason}" : ''));
+      json_out(['state' => get_state($u)]);
+    }
+
+    case 'delete_loss': {
+      $u = require_editor();
+      $id = body()['id'] ?? '';
+      $st = $pdo->prepare('SELECT * FROM losses WHERE id=?');
+      $st->execute([$id]);
+      $loss = $st->fetch();
+      if (!$loss) fail('対象の破損記録が見つかりません。');
+      $p = product_by_id($loss['product_id']);
+      $pdo->prepare('DELETE FROM losses WHERE id=?')->execute([$id]);
+      $bucketLabel = $loss['bucket'] === 'kiji' ? '木地在庫' : '完成在庫';
+      audit($u, 'delete', 'loss', $id, '破損記録を取消: ' . ($p['name'] ?? '') . " {$bucketLabel}×{$loss['qty']}");
+      json_out(['state' => get_state($u)]);
+    }
+
     /* ── ユーザー ── */
     case 'save_user': {
       $u = require_editor();
@@ -266,6 +313,7 @@ try {
     case 'reset': {
       $u = require_editor();
       if ((body()['pin'] ?? '') !== RESET_PIN) fail('パスワードが違います。', 403);
+      $pdo->exec('DELETE FROM losses');
       $pdo->exec('DELETE FROM lots');
       $pdo->exec('DELETE FROM products');
       $pdo->exec('DELETE FROM destinations');
@@ -276,6 +324,7 @@ try {
     case 'clear': {
       $u = require_editor();
       if ((body()['pin'] ?? '') !== RESET_PIN) fail('パスワードが違います。', 403);
+      $pdo->exec('DELETE FROM losses');
       $pdo->exec('DELETE FROM lots');
       $pdo->exec('DELETE FROM products');
       $pdo->exec('DELETE FROM destinations');
@@ -289,6 +338,7 @@ try {
       $d = body()['data'] ?? null;
       if (!is_array($d) || !isset($d['products']) || !is_array($d['products'])) fail('形式が不正です。');
       $pdo->beginTransaction();
+      $pdo->exec('DELETE FROM losses');
       $pdo->exec('DELETE FROM lots');
       $pdo->exec('DELETE FROM products');
       $pdo->exec('DELETE FROM destinations');
@@ -305,6 +355,12 @@ try {
         if (empty($l['productId']) || !isset($validIds[$l['productId']])) continue;
         $status = in_array($l['status'] ?? '', $VALID_STATUS, true) ? $l['status'] : 'planned';
         $il->execute([!empty($l['id']) ? (string)$l['id'] : uuid(), $l['productId'], $l['lotNo'] ?? '', max(0, (int)($l['qty'] ?? 0)), $l['dueDate'] ?? '', $status, $l['color'] ?? '', $l['dest'] ?? '', $l['note'] ?? '', $l['kijiDate'] ?? '', $l['paintedDate'] ?? '', $l['shippedDate'] ?? '', now(), now()]);
+      }
+      $iloss = $pdo->prepare('INSERT INTO losses (id, product_id, bucket, qty, color, loss_date, reason, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)');
+      foreach (($d['losses'] ?? []) as $x) {
+        if (empty($x['productId']) || !isset($validIds[$x['productId']])) continue;
+        $bucket = in_array($x['bucket'] ?? '', ['kiji', 'painted'], true) ? $x['bucket'] : 'kiji';
+        $iloss->execute([!empty($x['id']) ? (string)$x['id'] : uuid(), $x['productId'], $bucket, max(0, (int)($x['qty'] ?? 0)), $x['color'] ?? '', $x['lossDate'] ?? '', $x['reason'] ?? '', $x['createdBy'] ?? '', now()]);
       }
       foreach (($d['destinations'] ?? []) as $name) ensure_destination((string)$name);
       $pdo->commit();

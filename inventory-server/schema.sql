@@ -59,3 +59,16 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at DATETIME,
   INDEX idx_audit_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS losses (
+  id VARCHAR(36) PRIMARY KEY,
+  product_id VARCHAR(36) NOT NULL,
+  bucket VARCHAR(16) NOT NULL,   -- 'kiji'（木地在庫）/ 'painted'（完成在庫）
+  qty INT NOT NULL DEFAULT 0,
+  color VARCHAR(64) DEFAULT '',
+  loss_date VARCHAR(10) DEFAULT '',
+  reason VARCHAR(255) DEFAULT '',
+  created_by VARCHAR(255) DEFAULT '',
+  created_at DATETIME,
+  INDEX idx_losses_product (product_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -86,10 +86,23 @@ function migrate(PDO $pdo): void {
     created_at $dt
   )$eng");
 
+  $pdo->exec("CREATE TABLE IF NOT EXISTS losses (
+    id VARCHAR(36) PRIMARY KEY,
+    product_id VARCHAR(36) NOT NULL,
+    bucket VARCHAR(16) NOT NULL,
+    qty $int NOT NULL DEFAULT 0,
+    color VARCHAR(64) DEFAULT '',
+    loss_date VARCHAR(10) DEFAULT '',
+    reason VARCHAR(255) DEFAULT '',
+    created_by VARCHAR(255) DEFAULT '',
+    created_at $dt
+  )$eng");
+
   foreach ([
     'CREATE INDEX idx_lots_product ON lots (product_id)',
     'CREATE INDEX idx_lots_status ON lots (status)',
     'CREATE INDEX idx_audit_created ON audit_log (created_at)',
+    'CREATE INDEX idx_losses_product ON losses (product_id)',
   ] as $sql) {
     try { $pdo->exec($sql); } catch (PDOException $e) { /* already exists */ }
   }

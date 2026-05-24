@@ -146,6 +146,12 @@ td.center, th.center { text-align: center; }
 .strong-num { font-weight: 700; font-size: 0.95rem; color: var(--charcoal); }
 .lotno { font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--gold-dark); }
 .color-break { font-size: 0.7rem; color: var(--muted); margin-top: 3px; }
+.prod-link { background: none; border: none; padding: 0; font: inherit; cursor: pointer; color: var(--charcoal); font-weight: 500; text-align: left; border-bottom: 1px dotted var(--gold); transition: color 0.15s; }
+.prod-link:hover { color: var(--gold-dark); }
+.cat-row td { background: var(--cream); font-weight: 500; color: var(--gold-dark); letter-spacing: 0.04em; font-size: 0.78rem; padding: 9px 16px; }
+.cat-row .cat-count { color: var(--muted); font-weight: 400; margin-left: 8px; }
+.detail-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.8rem; color: var(--muted); margin-bottom: 14px; }
+.detail-meta b { color: var(--charcoal); font-weight: 600; }
 
 /* ── Badges ── */
 .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 0.68rem; font-weight: 500; letter-spacing: 0.04em; padding: 3px 10px; border-radius: 100px; white-space: nowrap; }
@@ -300,9 +306,10 @@ body.locked .app-header, body.locked main { display: none; }
     <div class="view-head">
       <div>
         <h1 class="view-title">在庫・製品マスタ</h1>
-        <p class="view-sub">木地在庫＝木地完成の数量。完成在庫＝塗装済の数量。予測在庫＝木地＋完成＋予定。</p>
+        <p class="view-sub">木地在庫＝木地完成の数量。完成在庫＝塗装済の数量。予測在庫＝木地＋完成＋予定。製品名をクリックでロット別の明細を表示します。</p>
       </div>
       <div class="toolbar">
+        <select id="inv-filter"><option value="all">すべてのカテゴリ</option></select>
         <button class="btn ghost" data-action="export-csv">CSV出力</button>
         <button class="btn editor-only" data-action="new-product">＋ 製品を追加</button>
       </div>
@@ -684,27 +691,47 @@ function renderShipments() {
   el.innerHTML = `<table><thead><tr><th>出荷日</th><th>ロット番号</th><th>製品</th><th class="num">数量</th><th>カラー</th><th>出荷先</th><th>メモ</th>${canEdit ? "<th></th>" : ""}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
+function syncInvFilter() {
+  const sel = document.getElementById("inv-filter");
+  const cur = sel.value;
+  const cats = [...new Set(state.products.map((p) => p.category || "未分類"))]
+    .sort((a, b) => a === "未分類" ? 1 : b === "未分類" ? -1 : a.localeCompare(b, "ja"));
+  sel.innerHTML = `<option value="all">すべてのカテゴリ</option>` +
+    cats.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  sel.value = cats.includes(cur) || cur === "all" ? cur : "all";
+}
 function renderInventory() {
   const canEdit = isEditor();
+  syncInvFilter();
+  const filter = document.getElementById("inv-filter").value;
+  const colspan = canEdit ? 9 : 8;
   const el = document.getElementById("inventory-table");
   if (!state.products.length) { el.innerHTML = emptyMsg("製品が登録されていません。"); return; }
-  const rows = [...state.products]
-    .sort((a, b) => (a.category || "").localeCompare(b.category || "", "ja") || a.name.localeCompare(b.name, "ja"))
-    .map((p) => {
+  const groups = {};
+  state.products.forEach((p) => { const c = p.category || "未分類"; (groups[c] = groups[c] || []).push(p); });
+  let cats = Object.keys(groups).sort((a, b) => a === "未分類" ? 1 : b === "未分類" ? -1 : a.localeCompare(b, "ja"));
+  if (filter !== "all") cats = cats.filter((c) => c === filter);
+  if (!cats.length) { el.innerHTML = emptyMsg("該当する製品はありません。"); return; }
+  const body = cats.map((c) => {
+    const prods = groups[c].sort((a, b) => a.name.localeCompare(b.name, "ja"));
+    const head = `<tr class="cat-row"><td colspan="${colspan}">${esc(c)}<span class="cat-count">${prods.length} 品目</span></td></tr>`;
+    const rows = prods.map((p) => {
       const st = stockState(p.id);
       return `<tr>
-        <td><div class="prod-name">${esc(p.name)}</div></td>
-        <td>${p.category ? `<span class="chip">${esc(p.category)}</span>` : '<span class="muted">未分類</span>'}</td>
+        <td><button class="prod-link" data-action="product-detail" data-id="${p.id}">${esc(p.name)}</button></td>
         <td class="num muted">${num(rawStock(p.id))}</td>
         <td class="num"><span class="strong-num">${num(finishedStock(p.id))}</span>${colorBreakHtml(p.id)}</td>
         <td class="num muted">${num(p.safetyStock)}</td>
         <td class="num muted">${num(plannedQty(p.id))}</td>
         <td class="num">${num(projectedStock(p.id))}</td>
         <td class="center"><span class="badge ${st.key}">${st.label}</span></td>
+        <td class="center"><button class="btn sm ghost" data-action="product-detail" data-id="${p.id}">明細</button></td>
         ${canEdit ? `<td class="row-actions"><button class="btn sm ghost" data-action="edit-product" data-id="${p.id}">編集</button><button class="btn sm ghost danger" data-action="delete-product" data-id="${p.id}">削除</button></td>` : ""}
       </tr>`;
     }).join("");
-  el.innerHTML = `<table><thead><tr><th>製品名</th><th>カテゴリ</th><th class="num">木地在庫</th><th class="num">完成在庫</th><th class="num">安全在庫</th><th class="num">予定</th><th class="num">予測在庫</th><th class="center">状態</th>${canEdit ? "<th></th>" : ""}</tr></thead><tbody>${rows}</tbody></table>`;
+    return head + rows;
+  }).join("");
+  el.innerHTML = `<table><thead><tr><th>製品名</th><th class="num">木地在庫</th><th class="num">完成在庫</th><th class="num">安全在庫</th><th class="num">予定</th><th class="num">予測在庫</th><th class="center">状態</th><th class="center">明細</th>${canEdit ? "<th></th>" : ""}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
 function renderUsers() {
@@ -732,12 +759,12 @@ function renderUsers() {
 /* ──────────────── モーダル ──────────────── */
 const overlay = document.getElementById("modal-overlay");
 const modalEl = document.getElementById("modal");
-function openModal(html) { modalEl.innerHTML = html; overlay.classList.add("open"); const f = modalEl.querySelector("input, select, textarea"); if (f) setTimeout(() => f.focus(), 50); }
-function closeModal() { overlay.classList.remove("open"); modalEl.innerHTML = ""; }
+function openModal(html) { modalEl.style.maxWidth = ""; modalEl.innerHTML = html; overlay.classList.add("open"); const f = modalEl.querySelector("input, select, textarea"); if (f) setTimeout(() => f.focus(), 50); }
+function closeModal() { overlay.classList.remove("open"); modalEl.innerHTML = ""; modalEl.style.maxWidth = ""; }
 overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) closeModal(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && overlay.classList.contains("open")) closeModal(); });
 
-const productOptions = (sel) => state.products.map((p) => `<option value="${p.id}" ${p.id === sel ? "selected" : ""}>${esc(p.name)}（${esc(p.category || "未分類")}）</option>`).join("");
+const productNameDatalist = () => `<datalist id="prod-options">${state.products.map((p) => `<option value="${esc(p.name)}">`).join("")}</datalist>`;
 const colorOptions = (sel) => `<option value="">（未選択）</option>` + COLORS.map((c) => `<option value="${esc(c)}" ${c === sel ? "selected" : ""}>${esc(c)}</option>`).join("");
 const categoryOptions = (sel) => `<option value="">（未分類）</option>` + CATEGORIES.map((c) => `<option value="${esc(c)}" ${c === sel ? "selected" : ""}>${esc(c)}</option>`).join("");
 const destDatalist = () => `<datalist id="dest-options">${state.destinations.map((d) => `<option value="${esc(d)}">`).join("")}</datalist>`;
@@ -770,29 +797,48 @@ function saveProduct(id) {
 
 /* 生産ロットフォーム */
 function openLotForm(id, prefillPid) {
-  if (!state.products.length) { toast("先に製品を登録してください", true); switchView("inventory"); return; }
   const l = id ? state.lots.find((x) => x.id === id) : null;
-  const selPid = l ? l.productId : (prefillPid || state.products[0].id);
+  const baseP = l ? productById(l.productId) : (prefillPid ? productById(prefillPid) : null);
+  const pname = baseP ? baseP.name : "";
+  const pcat = baseP ? (baseP.category || "") : "";
+  const status = l ? l.status : "planned";
+  const colorShown = status === "painted" || status === "shipped";
   openModal(`
-    <div class="modal-head"><h3>${l ? "生産予定を編集" : "生産予定を追加"}</h3><p>木地完成で木地在庫、塗装済で完成在庫、出荷済で出庫されます。</p></div>
+    <div class="modal-head"><h3>${l ? "生産予定を編集" : "生産予定を追加"}</h3><p>木地完成で木地在庫、塗装済で完成在庫、出荷済で出庫されます。カラーは木地完成後（塗装時）に選択します。</p></div>
     <div class="modal-body">
       <div class="field-row">
-        <div class="field-group"><label class="field">製品 *</label><select id="f-pid">${productOptions(selPid)}</select></div>
+        <div class="field-group"><label class="field">製品名 *</label><input type="text" id="f-pname" list="prod-options" value="${esc(pname)}" placeholder="入力または選択（新規は追加されます）">${productNameDatalist()}</div>
+        <div class="field-group"><label class="field">カテゴリ</label><select id="f-cat">${categoryOptions(pcat)}</select></div>
+      </div>
+      <div class="field-row">
         <div class="field-group"><label class="field">ロット番号（任意）</label><input type="text" id="f-lot" value="${l ? esc(l.lotNo || "") : ""}" placeholder="特注などは空欄可"></div>
-      </div>
-      <div class="field-row">
         <div class="field-group"><label class="field">数量 *</label><input type="number" id="f-qty" min="1" step="1" value="${l ? l.qty : 1}"></div>
-        <div class="field-group"><label class="field">完成予定日</label><input type="date" id="f-due" value="${l ? esc(l.dueDate || "") : todayStr()}"></div>
       </div>
       <div class="field-row">
-        <div class="field-group"><label class="field">状態</label><select id="f-status">${STATUS_ORDER.map((k) => `<option value="${k}" ${l && l.status === k ? "selected" : ""}>${STATUS[k].label}</option>`).join("")}</select></div>
-        <div class="field-group"><label class="field">カラー（塗装済以降・任意）</label><select id="f-color">${colorOptions(l ? l.color : "")}</select></div>
+        <div class="field-group"><label class="field">完成予定日</label><input type="date" id="f-due" value="${l ? esc(l.dueDate || "") : todayStr()}"></div>
+        <div class="field-group"><label class="field">状態</label><select id="f-status">${STATUS_ORDER.map((k) => `<option value="${k}" ${status === k ? "selected" : ""}>${STATUS[k].label}</option>`).join("")}</select></div>
       </div>
-      <div class="field-group"><label class="field">出荷先（出荷済・任意）</label><input type="text" id="f-dest" list="dest-options" value="${l ? esc(l.dest || "") : ""}" placeholder="入力するとマスタに追加されます">${destDatalist()}</div>
+      <div class="field-row" id="color-row" style="${colorShown ? "" : "display:none;"}">
+        <div class="field-group"><label class="field">カラー（塗装時に選択・任意）</label><select id="f-color">${colorOptions(l ? l.color : "")}</select></div>
+        <div class="field-group"><label class="field">出荷先（出荷済・任意）</label><input type="text" id="f-dest" list="dest-options" value="${l ? esc(l.dest || "") : ""}" placeholder="入力するとマスタに追加されます">${destDatalist()}</div>
+      </div>
       <div class="field-group"><label class="field">メモ</label><input type="text" id="f-note" value="${l ? esc(l.note || "") : ""}"></div>
       <div class="form-error" id="f-err"></div>
     </div>
     <div class="modal-foot"><button class="btn ghost" data-action="close">キャンセル</button><button class="btn" data-action="save-lot" data-id="${id || ""}">保存</button></div>`);
+  const statusSel = document.getElementById("f-status");
+  statusSel.addEventListener("change", () => {
+    const s = statusSel.value;
+    document.getElementById("color-row").style.display = (s === "painted" || s === "shipped") ? "" : "none";
+  });
+}
+function resolveProduct(name, category) {
+  const trimmed = name.trim();
+  let p = state.products.find((x) => x.name.toLowerCase() === trimmed.toLowerCase());
+  if (p) { if (category && category !== p.category) p.category = category; return p; }
+  p = { id: uid(), name: trimmed, category: category || "", safetyStock: 0 };
+  state.products.push(p);
+  return p;
 }
 function stampStatusDates(lot, prev) {
   const t = todayStr();
@@ -801,7 +847,8 @@ function stampStatusDates(lot, prev) {
   if (lot.status === "shipped") { if (!lot.kijiDate) lot.kijiDate = t; if (!lot.paintedDate) lot.paintedDate = t; if (!lot.shippedDate) lot.shippedDate = t; }
 }
 function saveLot(id) {
-  const productId = document.getElementById("f-pid").value;
+  const pname = document.getElementById("f-pname").value.trim();
+  const category = document.getElementById("f-cat").value;
   const lotNo = document.getElementById("f-lot").value.trim();
   const qty = parseInt(document.getElementById("f-qty").value, 10) || 0;
   const dueDate = document.getElementById("f-due").value;
@@ -810,7 +857,9 @@ function saveLot(id) {
   const dest = document.getElementById("f-dest").value.trim();
   const note = document.getElementById("f-note").value.trim();
   const err = document.getElementById("f-err");
+  if (!pname) { err.textContent = "製品名を入力してください。"; return; }
   if (qty < 1) { err.textContent = "数量は1以上で入力してください。"; return; }
+  const productId = resolveProduct(pname, category).id;
   if (dest && !state.destinations.includes(dest)) state.destinations.push(dest);
   if (id) {
     const l = state.lots.find((x) => x.id === id);
@@ -824,6 +873,69 @@ function saveLot(id) {
     toast("生産予定を追加しました");
   }
   save(); closeModal(); render();
+}
+
+/* 木地完成後のカラー選択 */
+function promptColor(lotId) {
+  const l = state.lots.find((x) => x.id === lotId);
+  if (!l) return;
+  const p = productById(l.productId);
+  openModal(`
+    <div class="modal-head"><h3>カラーを選択</h3><p>${esc(p ? p.name : "")}${l.lotNo ? "（" + esc(l.lotNo) + "）" : ""} の塗装カラーを選択してください。</p></div>
+    <div class="modal-body">
+      <div class="field-group"><label class="field">カラー（任意・後で変更できます）</label><select id="pc-color">${colorOptions(l.color)}</select></div>
+    </div>
+    <div class="modal-foot"><button class="btn ghost" data-action="close">スキップ</button><button class="btn" id="pc-save">保存</button></div>`);
+  document.getElementById("pc-save").addEventListener("click", () => {
+    l.color = document.getElementById("pc-color").value;
+    save(); closeModal(); render();
+    if (l.color) toast("カラー「" + l.color + "」を登録しました");
+  });
+}
+
+/* 製品ごとのロット明細 */
+function openProductDetail(pid) {
+  const p = productById(pid);
+  if (!p) return;
+  const lots = state.lots.filter((l) => l.productId === pid)
+    .sort((a, b) => (b.dueDate || "").localeCompare(a.dueDate || ""));
+  const st = stockState(pid);
+  const meta = `<div class="detail-meta">
+    <span>カテゴリ <b>${esc(p.category || "未分類")}</b></span>
+    <span>木地在庫 <b>${num(rawStock(pid))}</b></span>
+    <span>完成在庫 <b>${num(finishedStock(pid))}</b></span>
+    <span>安全在庫 <b>${num(p.safetyStock)}</b></span>
+    <span>予定 <b>${num(plannedQty(pid))}</b></span>
+    <span>予測在庫 <b>${num(projectedStock(pid))}</b></span>
+    <span>状態 <span class="badge ${st.key}">${st.label}</span></span>
+  </div>`;
+  let table;
+  if (!lots.length) {
+    table = emptyMsg("この製品のロットはまだありません。");
+  } else {
+    const rows = lots.map((l) => {
+      const s = STATUS[l.status];
+      return `<tr>
+        <td>${l.lotNo ? `<span class="lotno">${esc(l.lotNo)}</span>` : '<span class="muted">—</span>'}</td>
+        <td class="num strong-num">${num(l.qty)}</td>
+        <td class="center"><span class="badge ${s.cls}">${s.label}</span></td>
+        <td>${l.color ? `<span class="chip">${esc(l.color)}</span>` : '<span class="muted">—</span>'}</td>
+        <td>${esc(fmtDate(l.dueDate))}</td>
+        <td>${esc(fmtDate(l.kijiDate))}</td>
+        <td>${esc(fmtDate(l.paintedDate))}</td>
+        <td>${esc(fmtDate(l.shippedDate))}</td>
+        <td>${esc(l.dest || "—")}</td>
+        <td class="muted">${esc(l.note || "")}</td>
+      </tr>`;
+    }).join("");
+    table = `<div class="table-wrap"><table><thead><tr><th>ロット番号</th><th class="num">数量</th><th class="center">状態</th><th>カラー</th><th>完成予定日</th><th>木地完成日</th><th>塗装済日</th><th>出荷日</th><th>出荷先</th><th>メモ</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  modalEl.innerHTML = `
+    <div class="modal-head"><h3>${esc(p.name)}</h3><p>ロット番号ごとの明細（完成予定日の新しい順）</p></div>
+    <div class="modal-body">${meta}${table}</div>
+    <div class="modal-foot">${isEditor() ? `<button class="btn ghost" data-action="new-lot" data-pid="${pid}">＋ 生産予定を追加</button>` : ""}<button class="btn" data-action="close">閉じる</button></div>`;
+  modalEl.style.maxWidth = "860px";
+  overlay.classList.add("open");
 }
 
 /* ユーザーフォーム */
@@ -933,6 +1045,7 @@ function switchView(view) {
 }
 document.getElementById("tabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-view]"); if (b) switchView(b.dataset.view); });
 document.getElementById("prod-filter").addEventListener("change", renderProduction);
+document.getElementById("inv-filter").addEventListener("change", renderInventory);
 
 /* ──────────────── アクション ──────────────── */
 const EDITOR_ACTIONS = new Set([
@@ -961,6 +1074,7 @@ document.body.addEventListener("click", (e) => {
         () => { state.products = state.products.filter((x) => x.id !== id); state.lots = state.lots.filter((l) => l.productId !== id); save(); render(); toast("製品を削除しました"); });
       break;
     }
+    case "product-detail": openProductDetail(id); break;
     case "new-lot": openLotForm(null, pid); break;
     case "edit-lot": openLotForm(id); break;
     case "save-lot": saveLot(id); break;
@@ -1001,8 +1115,11 @@ document.body.addEventListener("change", (e) => {
   if (!isEditor()) { render(); return; }
   const l = state.lots.find((x) => x.id === sel.dataset.id);
   if (!l) return;
-  l.status = sel.value; stampStatusDates(l);
+  const newStatus = sel.value;
+  const askColor = (newStatus === "painted" || newStatus === "shipped") && !l.color;
+  l.status = newStatus; stampStatusDates(l);
   save(); render(); toast("状態を「" + STATUS[l.status].label + "」に変更しました");
+  if (askColor) promptColor(l.id);
 });
 
 document.getElementById("import-file").addEventListener("change", (e) => { if (e.target.files[0]) importJSON(e.target.files[0]); e.target.value = ""; });

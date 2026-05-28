@@ -152,6 +152,28 @@ td.center, th.center { text-align: center; }
 .cat-row .cat-count { color: var(--muted); font-weight: 400; margin-left: 8px; }
 .detail-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.8rem; color: var(--muted); margin-bottom: 14px; }
 .detail-meta b { color: var(--charcoal); font-weight: 600; }
+.cadence { margin: 4px 0 18px; padding: 14px 18px 12px; background: var(--cream); border: 1px solid var(--line-soft); border-radius: 12px; }
+.cadence-head { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 0.78rem; color: var(--muted); margin-bottom: 10px; }
+.cadence-head b { color: var(--charcoal); font-weight: 600; font-size: 0.95rem; }
+.cadence-head .since { color: var(--muted); font-weight: 400; margin-left: 4px; font-size: 0.72rem; }
+.cadence-track { position: relative; height: 70px; margin: 4px 6px 6px; }
+.cadence-axis { position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--line); }
+.cadence-tick { position: absolute; top: calc(50% + 20px); transform: translateX(-50%); font-size: 0.66rem; color: var(--muted); white-space: nowrap; }
+.cadence-tick::before { content: ""; position: absolute; left: 50%; top: -18px; height: 6px; width: 1px; background: var(--line); transform: translateX(-50%); }
+.cadence-now { position: absolute; top: 4px; bottom: 22px; border-left: 1.5px dashed var(--bad); pointer-events: none; }
+.cadence-now span { position: absolute; top: -2px; left: 4px; font-size: 0.62rem; color: var(--bad); background: var(--cream); padding: 0 4px; border-radius: 3px; line-height: 1.4; }
+.cadence-dot { position: absolute; top: 50%; border-radius: 50%; transform: translate(-50%,-50%); box-shadow: 0 0 0 2px var(--cream); cursor: help; }
+.cadence-dot.kiji { background: var(--warn); }
+.cadence-dot.painted { background: var(--ok); }
+.cadence-dot.shipped { background: var(--muted); opacity: 0.6; }
+.cadence-dot.planned { background: var(--warm-white); border: 1.5px dashed var(--info); box-shadow: 0 0 0 2px var(--cream); }
+.cadence-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.7rem; color: var(--muted); margin-top: 8px; }
+.cadence-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.cadence-legend i.kiji { background: var(--warn); }
+.cadence-legend i.painted { background: var(--ok); }
+.cadence-legend i.shipped { background: var(--muted); opacity: 0.6; }
+.cadence-legend i.planned { background: transparent; border: 1.5px dashed var(--info); width: 7px; height: 7px; }
+.cadence-empty { margin: 4px 0 18px; padding: 12px 16px; font-size: 0.82rem; color: var(--muted); text-align: center; border: 1px dashed var(--line); border-radius: 10px; background: var(--warm-white); }
 
 /* ── Badges ── */
 .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 0.68rem; font-weight: 500; letter-spacing: 0.04em; padding: 3px 10px; border-radius: 100px; white-space: nowrap; }
@@ -528,6 +550,91 @@ function stockState(pid) {
   return { key: "ok", label: "適正" };
 }
 
+/* ── 製造ペース（製品クリック時に表示） ── */
+const dayMs = 86400000;
+const dayDiff = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / dayMs);
+const daysSince = (d) => Math.max(0, Math.round((Date.now() - Date.parse(d)) / dayMs));
+function fmtInterval(days) {
+  if (days < 60) return `約${days}日`;
+  const months = Math.round(days / 30);
+  if (months < 18) return `約${months}ヶ月`;
+  return `約${(days / 365).toFixed(1)}年`;
+}
+function productionCadence(pid) {
+  const events = state.lots.filter((l) => l.productId === pid)
+    .map((l) => {
+      const date = l.kijiDate || l.paintedDate || l.shippedDate || "";
+      return date ? { date, qty: Number(l.qty) || 0, status: l.status, lotNo: l.lotNo || "" } : null;
+    })
+    .filter((e) => e !== null)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const planned = state.lots.filter((l) => l.productId === pid && l.status === "planned" && l.dueDate)
+    .map((l) => ({ date: l.dueDate, qty: Number(l.qty) || 0 }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const intervals = [];
+  for (let i = 1; i < events.length; i++) intervals.push(dayDiff(events[i - 1].date, events[i].date));
+  const avg = intervals.length ? Math.round(intervals.reduce((s, x) => s + x, 0) / intervals.length) : 0;
+  return { events, planned, intervals, avg, last: events.length ? events[events.length - 1] : null };
+}
+function cadenceHtml(pid) {
+  const c = productionCadence(pid);
+  if (!c.events.length && !c.planned.length) {
+    return `<div class="cadence-empty">まだ製造履歴がありません。生産予定を追加すると、ここに製造の間隔が表示されます。</div>`;
+  }
+  const todayMs = Date.now();
+  const firstMs = c.events.length ? Date.parse(c.events[0].date) : todayMs;
+  const lastPlannedMs = c.planned.length ? Date.parse(c.planned[c.planned.length - 1].date) : todayMs;
+  /* 表示幅：最初の製造〜（今日 or 最終予定）に左右1ヶ月のゆとり。最低6ヶ月分は確保。 */
+  let minMs = Math.min(firstMs, todayMs) - dayMs * 30;
+  let maxMs = Math.max(lastPlannedMs, todayMs) + dayMs * 30;
+  if (maxMs - minMs < dayMs * 180) minMs = maxMs - dayMs * 180;
+  const span = maxMs - minMs;
+  const pct = (ms) => Math.max(0, Math.min(100, ((ms - minMs) / span) * 100));
+  const maxQty = Math.max(1, ...c.events.map((e) => e.qty), ...c.planned.map((p) => p.qty));
+  const radius = (q) => 5 + Math.round((Math.min(q, maxQty) / maxQty) * 7);
+  const dots = c.events.map((e) => {
+    const r = radius(e.qty), x = pct(Date.parse(e.date));
+    const label = `${e.date} ${STATUS[e.status]?.label || e.status} ×${e.qty}${e.lotNo ? ` (${e.lotNo})` : ""}`;
+    return `<span class="cadence-dot ${e.status}" style="left:${x}%;width:${r * 2}px;height:${r * 2}px;" title="${esc(label)}"></span>`;
+  }).join("");
+  const plannedDots = c.planned.map((p) => {
+    const r = radius(p.qty), x = pct(Date.parse(p.date));
+    return `<span class="cadence-dot planned" style="left:${x}%;width:${r * 2}px;height:${r * 2}px;" title="${esc(p.date + " 予定 ×" + p.qty)}"></span>`;
+  }).join("");
+  /* 月ティック：表示範囲に応じて間隔を決定 */
+  const months = Math.max(1, Math.round(span / (dayMs * 30)));
+  const tickStep = months <= 8 ? 1 : months <= 18 ? 2 : months <= 36 ? 3 : 6;
+  const ticks = [];
+  const start = new Date(minMs);
+  let cur = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  while (cur.getTime() <= maxMs) {
+    const m = cur.getMonth();
+    if (m % tickStep === 0) {
+      const label = m === 0 ? `${cur.getFullYear()}` : `${m + 1}月`;
+      ticks.push(`<div class="cadence-tick" style="left:${pct(cur.getTime())}%;">${label}</div>`);
+    }
+    cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+  }
+  const nowX = pct(todayMs);
+  const nowMark = `<div class="cadence-now" style="left:${nowX}%;"><span>今日</span></div>`;
+  const head = [];
+  head.push(`<span>製造回数 <b>${c.events.length}回</b></span>`);
+  if (c.avg) head.push(`<span>平均間隔 <b>${fmtInterval(c.avg)}</b></span>`);
+  if (c.last) head.push(`<span>最終製造 <b>${fmtDate(c.last.date)}</b><span class="since">（${daysSince(c.last.date)}日前）</span></span>`);
+  if (c.planned.length) head.push(`<span>次回予定 <b>${fmtDate(c.planned[0].date)}</b></span>`);
+  return `<div class="cadence">
+    <div class="cadence-head">${head.join("")}</div>
+    <div class="cadence-track">
+      <div class="cadence-axis"></div>
+      ${ticks.join("")}
+      ${nowMark}
+      ${dots}
+      ${plannedDots}
+    </div>
+    <div class="cadence-legend"><span><i class="kiji"></i>木地完成</span><span><i class="painted"></i>塗装済</span><span><i class="shipped"></i>出荷済</span><span><i class="planned"></i>予定</span><span class="muted">※円の大きさ＝ロット数量</span></div>
+  </div>`;
+}
+
 /* ──────────────── レンダリング ──────────────── */
 let activeView = "dashboard";
 function render() {
@@ -888,6 +995,7 @@ function openProductDetail(pid) {
     ${lossQty(pid) ? `<span>破損計 <b style="color:var(--bad)">${num(lossQty(pid))}</b></span>` : ""}
     <span>状態 <span class="badge ${st.key}">${st.label}</span></span>
   </div>`;
+  const cadence = cadenceHtml(pid);
   let table;
   if (!lots.length) {
     table = emptyMsg("この製品のロットはまだありません。");
@@ -925,7 +1033,7 @@ function openProductDetail(pid) {
   }
   modalEl.innerHTML = `
     <div class="modal-head"><h3>${esc(p.name)}</h3><p>ロット番号ごとの明細（完成予定日の新しい順）</p></div>
-    <div class="modal-body">${meta}${table}${lossTable}</div>
+    <div class="modal-body">${meta}${cadence}${table}${lossTable}</div>
     <div class="modal-foot">${isEditor() ? `<button class="btn ghost danger" data-action="new-loss" data-id="${pid}">破損で減らす</button><button class="btn ghost" data-action="new-lot" data-pid="${pid}">＋ 生産予定を追加</button>` : ""}<button class="btn" data-action="close">閉じる</button></div>`;
   modalEl.style.maxWidth = "860px";
   overlay.classList.add("open");

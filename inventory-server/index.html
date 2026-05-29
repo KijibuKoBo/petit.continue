@@ -145,6 +145,9 @@ td.center, th.center { text-align: center; }
 .muted { color: var(--muted); }
 .strong-num { font-weight: 700; font-size: 0.95rem; color: var(--charcoal); }
 .lotno { font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--gold-dark); }
+.lot-link { background: none; border: none; padding: 0; font-variant-numeric: tabular-nums; font-size: 0.8rem; cursor: pointer; color: var(--gold-dark); border-bottom: 1px dotted var(--gold); text-align: left; transition: color 0.15s; }
+.lot-link:hover { color: var(--charcoal); }
+.lot-link.muted { color: var(--muted); border-bottom-color: var(--line); font-style: italic; }
 .color-break { font-size: 0.7rem; color: var(--muted); margin-top: 3px; }
 .prod-link { background: none; border: none; padding: 0; font: inherit; cursor: pointer; color: var(--charcoal); font-weight: 500; text-align: left; border-bottom: 1px dotted var(--gold); transition: color 0.15s; }
 .prod-link:hover { color: var(--gold-dark); }
@@ -846,11 +849,14 @@ function renderUsers() {
 
 /* ──────────────── モーダル ──────────────── */
 const overlay = document.getElementById("modal-overlay");
+let _detailPid = null;
 const modalEl = document.getElementById("modal");
 function openModal(html) { modalEl.style.maxWidth = ""; modalEl.innerHTML = html; overlay.classList.add("open"); const f = modalEl.querySelector("input, select, textarea"); if (f) setTimeout(() => f.focus(), 50); }
 function closeModal() { overlay.classList.remove("open"); modalEl.innerHTML = ""; modalEl.style.maxWidth = ""; }
-overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) closeModal(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && overlay.classList.contains("open")) closeModal(); });
+function dismissModal() { _detailPid = null; closeModal(); }
+function reopenDetailOrRender() { if (_detailPid && productById(_detailPid)) openProductDetail(_detailPid); else { _detailPid = null; render(); } }
+overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) dismissModal(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && overlay.classList.contains("open")) dismissModal(); });
 
 const productNameDatalist = () => `<datalist id="prod-options">${state.products.map((p) => `<option value="${esc(p.name)}">`).join("")}</datalist>`;
 const colorOptions = (sel) => `<option value="">（未選択）</option>` + COLORS.map((c) => `<option value="${esc(c)}" ${c === sel ? "selected" : ""}>${esc(c)}</option>`).join("");
@@ -954,7 +960,7 @@ async function saveLot(id) {
   if (qty < 1) { err.textContent = "数量は1以上で入力してください。"; return; }
   try {
     const d = await api("save_lot", { id: id || undefined, productName, category, lotNo, qty, dueDate, status, color, dest, note });
-    state = d.state; closeModal(); render(); toast(id ? "生産予定を更新しました" : "生産予定を追加しました");
+    state = d.state; closeModal(); reopenDetailOrRender(); toast(id ? "生産予定を更新しました" : "生産予定を追加しました");
   } catch (e) { err.textContent = e.message; }
 }
 
@@ -980,6 +986,7 @@ function promptColor(lotId) {
 function openProductDetail(pid) {
   const p = productById(pid);
   if (!p) return;
+  _detailPid = pid;
   const lots = state.lots.filter((l) => l.productId === pid)
     .sort((a, b) => (b.dueDate || "").localeCompare(a.dueDate || ""));
   const st = stockState(pid);
@@ -1000,10 +1007,18 @@ function openProductDetail(pid) {
   if (!lots.length) {
     table = emptyMsg("この製品のロットはまだありません。");
   } else {
+    const canEditLot = isEditor();
     const rows = lots.map((l) => {
       const s = STATUS[l.status];
+      const lotCell = l.lotNo
+        ? (canEditLot
+            ? `<button class="lot-link" data-action="edit-lot" data-id="${l.id}" title="クリックして編集">${esc(l.lotNo)}</button>`
+            : `<span class="lotno">${esc(l.lotNo)}</span>`)
+        : (canEditLot
+            ? `<button class="lot-link muted" data-action="edit-lot" data-id="${l.id}" title="クリックして編集">（番号なし／編集）</button>`
+            : '<span class="muted">—</span>');
       return `<tr>
-        <td>${l.lotNo ? `<span class="lotno">${esc(l.lotNo)}</span>` : '<span class="muted">—</span>'}</td>
+        <td>${lotCell}</td>
         <td class="num strong-num">${num(l.qty)}</td>
         <td class="center"><span class="badge ${s.cls}">${s.label}</span></td>
         <td>${l.color ? `<span class="chip">${esc(l.color)}</span>` : '<span class="muted">—</span>'}</td>
@@ -1073,7 +1088,7 @@ async function saveLoss(pid) {
   if (qty < 1) { err.textContent = "数量は1以上で入力してください。"; return; }
   try {
     const d = await api("record_loss", { productId: pid, bucket, qty, color, lossDate, reason });
-    state = d.state; closeModal(); render(); toast("破損・ロスを記録しました");
+    state = d.state; closeModal(); reopenDetailOrRender(); toast("破損・ロスを記録しました");
   } catch (e) { err.textContent = e.message; }
 }
 
@@ -1185,7 +1200,7 @@ document.body.addEventListener("click", (e) => {
   if (EDITOR_ACTIONS.has(a) && !isEditor()) { toast("編集権限が必要です", true); return; }
   switch (a) {
     case "logout": logout(); break;
-    case "close": closeModal(); break;
+    case "close": dismissModal(); break;
     case "new-product": openProductForm(); break;
     case "edit-product": openProductForm(id); break;
     case "save-product": saveProduct(id); break;
@@ -1203,13 +1218,13 @@ document.body.addEventListener("click", (e) => {
     case "save-lot": saveLot(id); break;
     case "delete-lot":
       confirmModal("生産予定を削除", "このロットを削除します。在庫からも差し引かれます。よろしいですか？",
-        async () => { const d = await api("delete_lot", { id }); state = d.state; closeModal(); render(); toast("削除しました"); });
+        async () => { const d = await api("delete_lot", { id }); state = d.state; closeModal(); reopenDetailOrRender(); toast("削除しました"); });
       break;
     case "new-loss": openLossForm(id); break;
     case "save-loss": saveLoss(id); break;
     case "del-loss":
       confirmModal("破損記録を取消", "この破損・ロス記録を取り消します（在庫が戻ります）。よろしいですか？",
-        async () => { const d = await api("delete_loss", { id }); state = d.state; closeModal(); render(); toast("破損記録を取り消しました"); if (pid) openProductDetail(pid); });
+        async () => { const d = await api("delete_loss", { id }); state = d.state; closeModal(); reopenDetailOrRender(); toast("破損記録を取り消しました"); });
       break;
     case "new-user": openUserForm(); break;
     case "edit-user": openUserForm(id); break;

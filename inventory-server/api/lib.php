@@ -154,13 +154,60 @@ function ensure_destination(string $name): void {
   }
 }
 
-/* 状態に応じて各日付を補完（未設定のものだけ今日で埋める） */
+/* 状態に応じて各日付を整理：必要な工程日が無ければ今日で埋め、当該状態より「先」の日付はクリアする */
 function stamp_dates(array &$lot): void {
   $t = date('Y-m-d');
-  $s = $lot['status'];
-  if (($s === 'kiji' || $s === 'painted' || $s === 'shipped') && empty($lot['kiji_date'])) $lot['kiji_date'] = $t;
-  if (($s === 'painted' || $s === 'shipped') && empty($lot['painted_date'])) $lot['painted_date'] = $t;
-  if ($s === 'shipped' && empty($lot['shipped_date'])) $lot['shipped_date'] = $t;
+  $level = ['planned' => 0, 'kiji' => 1, 'painted' => 2, 'shipped' => 3][$lot['status']] ?? 0;
+  $lot['kiji_date']    = $level >= 1 ? (empty($lot['kiji_date'])    ? $t : $lot['kiji_date'])    : '';
+  $lot['painted_date'] = $level >= 2 ? (empty($lot['painted_date']) ? $t : $lot['painted_date']) : '';
+  $lot['shipped_date'] = $level >= 3 ? (empty($lot['shipped_date']) ? $t : $lot['shipped_date']) : '';
+}
+
+/* CSRF & ログイン試行制限 */
+function csrf_token(): string {
+  if (empty($_SESSION['csrf'])) $_SESSION['csrf'] = bin2hex(random_bytes(16));
+  return $_SESSION['csrf'];
+}
+function require_csrf(): void {
+  $sent = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+  $sess = $_SESSION['csrf'] ?? '';
+  if ($sent === '' || $sess === '' || !hash_equals($sess, $sent)) {
+    fail('セッションが無効です。ページを再読み込みしてください。', 403);
+  }
+}
+function client_ip(): string {
+  return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+}
+function check_login_rate(string $ip): void {
+  $pdo = db();
+  $st = $pdo->prepare('SELECT fails, locked_until FROM login_attempts WHERE ip=?');
+  $st->execute([$ip]);
+  $r = $st->fetch();
+  if (!$r || empty($r['locked_until'])) return;
+  $until = strtotime($r['locked_until']);
+  if ($until && $until > time()) {
+    $sec = $until - time();
+    fail("ログイン試行が多すぎます。約{$sec}秒お待ちください。", 429);
+  }
+}
+function record_login_fail(string $ip): void {
+  $pdo = db();
+  $st = $pdo->prepare('SELECT fails, updated_at FROM login_attempts WHERE ip=?');
+  $st->execute([$ip]);
+  $r = $st->fetch();
+  $now = now();
+  if (!$r) {
+    $pdo->prepare('INSERT INTO login_attempts (ip, fails, locked_until, updated_at) VALUES (?,1,NULL,?)')->execute([$ip, $now]);
+    return;
+  }
+  $fails = (int)$r['fails'] + 1;
+  if (strtotime($r['updated_at']) < time() - 900) $fails = 1;
+  $locked = ($fails >= 5) ? date('Y-m-d H:i:s', time() + 900) : null;
+  $pdo->prepare('UPDATE login_attempts SET fails=?, locked_until=?, updated_at=? WHERE ip=?')
+      ->execute([$fails, $locked, $now, $ip]);
+}
+function clear_login_fails(string $ip): void {
+  db()->prepare('DELETE FROM login_attempts WHERE ip=?')->execute([$ip]);
 }
 
 /* サンプル初期データ投入（既存の製品/ロット/出荷先は呼び出し側で削除済み前提） */

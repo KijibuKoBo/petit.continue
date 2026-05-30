@@ -98,6 +98,13 @@ function migrate(PDO $pdo): void {
     created_at $dt
   )$eng");
 
+  $pdo->exec("CREATE TABLE IF NOT EXISTS login_attempts (
+    ip VARCHAR(45) PRIMARY KEY,
+    fails $int NOT NULL DEFAULT 0,
+    locked_until $dt,
+    updated_at $dt
+  )$eng");
+
   foreach ([
     'CREATE INDEX idx_lots_product ON lots (product_id)',
     'CREATE INDEX idx_lots_status ON lots (status)',

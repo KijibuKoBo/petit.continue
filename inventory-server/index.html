@@ -426,14 +426,17 @@ const fmtDate = (d) => (d ? d.replace(/-/g, "/") : "—");
 const fmtDateTime = (s) => (s ? String(s).replace(/-/g, "/").slice(0, 16) : "—");
 
 /* ──────────────── 通信 ──────────────── */
+let _csrfToken = "";
 async function api(action, payload, method) {
   const opt = { method: method || (payload !== undefined ? "POST" : "GET"), credentials: "same-origin", headers: {} };
   if (payload !== undefined) { opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(payload); }
+  if (_csrfToken) opt.headers["X-CSRF-Token"] = _csrfToken;
   let res;
   try { res = await fetch(API + "?action=" + encodeURIComponent(action), opt); }
   catch (e) { throw new Error("サーバーに接続できません。"); }
   let data = null;
   try { data = await res.json(); } catch (e) { throw new Error("サーバー応答が不正です。"); }
+  if (data && data.csrfToken) _csrfToken = data.csrfToken;
   if (!res.ok) throw new Error((data && data.error) ? data.error : ("エラー (" + res.status + ")"));
   return data;
 }
@@ -1058,14 +1061,28 @@ function openProductDetail(pid) {
 function openLossForm(pid) {
   const p = productById(pid);
   if (!p) return;
+  const kQty = rawStock(pid);
+  const fQty = finishedStock(pid);
+  /* 在庫が残っている方を既定（両方あれば完成在庫を優先） */
+  const defaultBucket = fQty > 0 ? "painted" : (kQty > 0 ? "kiji" : "painted");
+  const kijiOpt = `<option value="kiji"${defaultBucket === "kiji" ? " selected" : ""}${kQty <= 0 ? " disabled" : ""}>木地在庫（現在 ${num(kQty)}）${kQty <= 0 ? " ※在庫なし" : ""}</option>`;
+  const paintedOpt = `<option value="painted"${defaultBucket === "painted" ? " selected" : ""}${fQty <= 0 ? " disabled" : ""}>完成在庫・塗装済（現在 ${num(fQty)}）${fQty <= 0 ? " ※在庫なし" : ""}</option>`;
+  const colorBreak = finishedByColor(pid);
+  const hasColored = Object.keys(colorBreak).some((c) => c !== "（無）");
+  const colorOpts = Object.keys(colorBreak).length
+    ? `<option value="">— カラーを選択 —</option>` + Object.entries(colorBreak).map(([c, q]) => {
+        const v = c === "（無）" ? "" : c;
+        return `<option value="${esc(v)}">${esc(c)}（残 ${num(q)}）</option>`;
+      }).join("")
+    : `<option value="">（完成在庫なし）</option>`;
   openModal(`
     <div class="modal-head"><h3>破損・ロスで在庫を減らす</h3><p>${esc(p.name)} の在庫を、破損などの理由で減らします（出荷とは別管理）。</p></div>
     <div class="modal-body">
       <div class="field-row">
-        <div class="field-group"><label class="field">減らす在庫 *</label><select id="ls-bucket"><option value="kiji">木地在庫（現在 ${num(rawStock(pid))}）</option><option value="painted">完成在庫・塗装済（現在 ${num(finishedStock(pid))}）</option></select></div>
+        <div class="field-group"><label class="field">減らす在庫 *</label><select id="ls-bucket">${kijiOpt}${paintedOpt}</select></div>
         <div class="field-group"><label class="field">数量 *</label><input type="number" id="ls-qty" min="1" step="1" value="1"></div>
       </div>
-      <div class="field-group" id="ls-color-row" style="display:none;"><label class="field">カラー（完成在庫の場合・任意）</label><select id="ls-color">${colorOptions("")}</select></div>
+      <div class="field-group" id="ls-color-row" style="display:${defaultBucket === "painted" ? "" : "none"};"><label class="field">カラー${hasColored ? " *" : "（任意）"}</label><select id="ls-color">${colorOpts}</select></div>
       <div class="field-row">
         <div class="field-group"><label class="field">日付</label><input type="date" id="ls-date" value="${todayStr()}"></div>
         <div class="field-group"><label class="field">理由・段階</label><input type="text" id="ls-reason" placeholder="例：塗装中に破損 / 出荷前まとめで破損"></div>
@@ -1253,7 +1270,8 @@ document.body.addEventListener("click", (e) => {
   }
 });
 
-/* 状態変更セレクト */
+/* 状態変更セレクト：1段ずつ進める。飛ばす／戻すは確認。出荷へは出荷先プロンプト。 */
+const STATUS_LEVEL = { planned: 0, kiji: 1, painted: 2, shipped: 3 };
 document.body.addEventListener("change", async (e) => {
   const sel = e.target.closest('select[data-action="set-status"]');
   if (!sel) return;
@@ -1262,13 +1280,71 @@ document.body.addEventListener("change", async (e) => {
   const l = state.lots.find((x) => x.id === id);
   if (!l) return;
   const newStatus = sel.value;
-  const askColor = (newStatus === "painted" || newStatus === "shipped") && !l.color;
+  if (newStatus === l.status) return;
+  const oldLevel = STATUS_LEVEL[l.status];
+  const newLevel = STATUS_LEVEL[newStatus];
+  const fromLabel = STATUS[l.status].label;
+  const toLabel = STATUS[newStatus].label;
+
+  /* 出荷へ進める時：出荷先プロンプトに必ず遷移 */
+  if (newStatus === "shipped") {
+    promptShip(id);
+    /* セレクトの表示を元に戻す（プロンプトで保存して初めて反映） */
+    sel.value = l.status;
+    return;
+  }
+  /* 飛ばし or 後戻りは確認 */
+  if (newLevel - oldLevel !== 1) {
+    const isBack = newLevel < oldLevel;
+    const msg = isBack
+      ? `状態を「${fromLabel}」から「${toLabel}」へ戻します。\n${newLevel < 3 ? "出荷日は消去されます。" : ""}${newLevel < 2 ? "塗装済日も消去されます。" : ""}${newLevel < 1 ? "木地完成日も消去されます。" : ""}\nよろしいですか？`
+      : `状態を「${fromLabel}」から「${toLabel}」へ一気に進めます。\n途中の工程日は今日の日付で自動入力されます。\nよろしいですか？`;
+    if (!confirm(msg)) { sel.value = l.status; return; }
+  }
+  /* 塗装済への遷移かつ色未設定なら、変更後にカラープロンプト */
+  const askColor = newStatus === "painted" && !l.color;
   try {
     const d = await api("set_status", { id, status: newStatus });
-    state = d.state; render(); toast("状態を「" + STATUS[newStatus].label + "」に変更しました");
+    state = d.state; render(); toast("状態を「" + toLabel + "」に変更しました");
     if (askColor) promptColor(id);
   } catch (err) { toast(err.message, true); try { await refresh(); } catch (e2) {} }
 });
+
+/* 出荷情報プロンプト（status='shipped'専用） */
+function promptShip(lotId) {
+  const l = state.lots.find((x) => x.id === lotId);
+  if (!l) return;
+  const p = productById(l.productId);
+  const colorRow = l.color
+    ? `<div class="field-group"><label class="field">カラー</label><div><span class="chip">${esc(l.color)}</span></div></div>`
+    : `<div class="field-group"><label class="field">カラー（任意）</label><select id="ps-color">${colorOptions("")}</select></div>`;
+  openModal(`
+    <div class="modal-head"><h3>出荷情報を入力</h3><p>${esc(p ? p.name : "")}${l.lotNo ? "（" + esc(l.lotNo) + "）" : ""} ×${num(l.qty)} を出荷済にします。</p></div>
+    <div class="modal-body">
+      <div class="field-row">
+        <div class="field-group"><label class="field">出荷日 *</label><input type="date" id="ps-date" value="${todayStr()}"></div>
+        <div class="field-group"><label class="field">出荷先 *</label><input type="text" id="ps-dest" list="dest-options" value="${esc(l.dest || "")}" placeholder="出荷先名（マスタ自動追加）" autofocus>${destDatalist()}</div>
+      </div>
+      ${colorRow}
+      <div class="form-error" id="ps-err"></div>
+    </div>
+    <div class="modal-foot"><button class="btn ghost" data-action="close">キャンセル</button><button class="btn" id="ps-save">出荷済にする</button></div>`);
+  document.getElementById("ps-save").addEventListener("click", async () => {
+    const dest = document.getElementById("ps-dest").value.trim();
+    const shippedDate = document.getElementById("ps-date").value;
+    const colorEl = document.getElementById("ps-color");
+    const color = colorEl ? colorEl.value : undefined;
+    const err = document.getElementById("ps-err");
+    if (!dest) { err.textContent = "出荷先を入力してください。"; return; }
+    if (!shippedDate) { err.textContent = "出荷日を入力してください。"; return; }
+    const payload = { id: lotId, status: "shipped", dest, shippedDate };
+    if (color !== undefined) payload.color = color;
+    try {
+      const d = await api("set_status", payload);
+      state = d.state; closeModal(); reopenDetailOrRender(); toast("「" + dest + "」へ出荷済にしました");
+    } catch (e) { err.textContent = e.message; }
+  });
+}
 
 document.getElementById("import-file").addEventListener("change", (e) => { if (e.target.files[0]) importJSON(e.target.files[0]); e.target.value = ""; });
 

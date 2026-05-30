@@ -7,12 +7,21 @@ session_set_cookie_params(['lifetime' => 0, 'path' => '/', 'httponly' => true, '
 session_start();
 
 $VALID_STATUS = ['planned', 'kiji', 'painted', 'shipped'];
+$STATUS_LEVEL = ['planned' => 0, 'kiji' => 1, 'painted' => 2, 'shipped' => 3];
 $action = $_GET['action'] ?? '';
 
 try {
   $pdo = db();
 } catch (Throwable $e) {
-  fail('データベースに接続できません: ' . $e->getMessage(), 500);
+  error_log('[inventory] DB connect: ' . $e->getMessage());
+  fail('データベースに接続できません。設定を確認してください。', 500);
+}
+
+/* CSRF: 公開アクション以外は X-CSRF-Token ヘッダ必須 */
+csrf_token(); // ensure session token exists
+$PUBLIC_ACTIONS = ['me', 'login', 'setup'];
+if (!in_array($action, $PUBLIC_ACTIONS, true)) {
+  require_csrf();
 }
 
 try {
@@ -21,7 +30,7 @@ try {
     /* ── 認証 ── */
     case 'me': {
       $count = (int)$pdo->query('SELECT COUNT(*) c FROM users')->fetch()['c'];
-      json_out(['user' => current_user(), 'needsSetup' => $count === 0]);
+      json_out(['user' => current_user(), 'needsSetup' => $count === 0, 'csrfToken' => csrf_token()]);
     }
 
     case 'setup': {
@@ -36,23 +45,30 @@ try {
       $id = uuid();
       $pdo->prepare('INSERT INTO users (id, email, name, role, pass_hash, created_at) VALUES (?,?,?,?,?,?)')
           ->execute([$id, $email, $name, 'editor', password_hash($pw, PASSWORD_DEFAULT), now()]);
+      session_regenerate_id(true);
       $_SESSION['uid'] = $id;
       $u = current_user();
       audit($u, 'create', 'user', $id, '初期管理者を作成: ' . $email);
-      json_out(['user' => $u]);
+      json_out(['user' => $u, 'csrfToken' => csrf_token()]);
     }
 
     case 'login': {
+      $ip = client_ip();
+      check_login_rate($ip);
       $b = body();
       $email = strtolower(trim($b['email'] ?? ''));
       $pw = (string)($b['password'] ?? '');
       $st = $pdo->prepare('SELECT * FROM users WHERE LOWER(email) = ?');
       $st->execute([$email]);
       $u = $st->fetch();
-      if (!$u || !password_verify($pw, $u['pass_hash'])) fail('メールアドレスまたはパスワードが違います。', 401);
+      if (!$u || !password_verify($pw, $u['pass_hash'])) {
+        record_login_fail($ip);
+        fail('メールアドレスまたはパスワードが違います。', 401);
+      }
+      clear_login_fails($ip);
       session_regenerate_id(true);
       $_SESSION['uid'] = $u['id'];
-      json_out(['user' => ['id' => $u['id'], 'email' => $u['email'], 'name' => $u['name'], 'role' => $u['role']]]);
+      json_out(['user' => ['id' => $u['id'], 'email' => $u['email'], 'name' => $u['name'], 'role' => $u['role']], 'csrfToken' => csrf_token()]);
     }
 
     case 'logout': {
@@ -114,9 +130,11 @@ try {
       $id = body()['id'] ?? '';
       $p = product_by_id($id);
       if (!$p) fail('対象の製品が見つかりません。');
+      $pdo->beginTransaction();
       $pdo->prepare('DELETE FROM lots WHERE product_id = ?')->execute([$id]);
       $pdo->prepare('DELETE FROM losses WHERE product_id = ?')->execute([$id]);
       $pdo->prepare('DELETE FROM products WHERE id = ?')->execute([$id]);
+      $pdo->commit();
       audit($u, 'delete', 'product', $id, '製品を削除: ' . $p['name']);
       json_out(['state' => get_state($u)]);
     }
@@ -136,7 +154,11 @@ try {
       $dest = trim($b['dest'] ?? '');
       if ($dest !== '') ensure_destination($dest);
       $id = $b['id'] ?? '';
-      $lot = $id ? lot_by_id($id) : null;
+      $lot = null;
+      if ($id) {
+        $lot = lot_by_id($id);
+        if (!$lot) fail('対象のロットが見つかりません。他の人が削除した可能性があります。', 404);
+      }
       $fields = [
         'product_id' => $prod['id'],
         'lot_no' => trim($b['lotNo'] ?? ''),
@@ -151,7 +173,7 @@ try {
         'shipped_date' => $lot['shipped_date'] ?? '',
       ];
       stamp_dates($fields);
-      if ($id && $lot) {
+      if ($id) {
         $pdo->prepare('UPDATE lots SET product_id=?, lot_no=?, qty=?, due_date=?, status=?, color=?, dest=?, note=?, kiji_date=?, painted_date=?, shipped_date=?, updated_at=? WHERE id=?')
             ->execute([$fields['product_id'], $fields['lot_no'], $fields['qty'], $fields['due_date'], $fields['status'], $fields['color'], $fields['dest'], $fields['note'], $fields['kiji_date'], $fields['painted_date'], $fields['shipped_date'], now(), $id]);
         audit($u, 'update', 'lot', $id, "生産予定を編集: {$prod['name']} / {$fields['lot_no']} ×{$qty}（" . status_label($status) . '）');
@@ -172,12 +194,29 @@ try {
       if (!in_array($status, $VALID_STATUS, true)) fail('状態の値が不正です。');
       $lot = lot_by_id($id);
       if (!$lot) fail('対象のロットが見つかりません。');
+      $extraLog = [];
+      /* 任意の追加情報（呼び出し側のプロンプトで入る） */
+      if ($status === 'kiji' && !empty($b['kijiDate'])) $lot['kiji_date'] = trim($b['kijiDate']);
+      if ($status === 'painted') {
+        if (!empty($b['paintedDate'])) $lot['painted_date'] = trim($b['paintedDate']);
+        if (isset($b['color'])) $lot['color'] = trim($b['color']);
+      }
+      if ($status === 'shipped') {
+        if (!empty($b['shippedDate'])) $lot['shipped_date'] = trim($b['shippedDate']);
+        $dest = trim($b['dest'] ?? $lot['dest'] ?? '');
+        if ($dest === '') fail('出荷先を指定してください。');
+        $lot['dest'] = $dest;
+        ensure_destination($dest);
+        $extraLog[] = $dest;
+        if (isset($b['color'])) $lot['color'] = trim($b['color']);
+      }
       $lot['status'] = $status;
       stamp_dates($lot);
-      $pdo->prepare('UPDATE lots SET status=?, kiji_date=?, painted_date=?, shipped_date=?, updated_at=? WHERE id=?')
-          ->execute([$status, $lot['kiji_date'], $lot['painted_date'], $lot['shipped_date'], now(), $id]);
+      $pdo->prepare('UPDATE lots SET status=?, color=?, dest=?, kiji_date=?, painted_date=?, shipped_date=?, updated_at=? WHERE id=?')
+          ->execute([$status, $lot['color'], $lot['dest'], $lot['kiji_date'], $lot['painted_date'], $lot['shipped_date'], now(), $id]);
       $p = product_by_id($lot['product_id']);
-      audit($u, 'status', 'lot', $id, '状態変更: ' . ($p['name'] ?? '') . " / {$lot['lot_no']} → " . status_label($status));
+      $extra = $extraLog ? '（' . implode(', ', $extraLog) . '）' : '';
+      audit($u, 'status', 'lot', $id, '状態変更: ' . ($p['name'] ?? '') . " / {$lot['lot_no']} → " . status_label($status) . $extra);
       json_out(['state' => get_state($u)]);
     }
 
@@ -220,6 +259,13 @@ try {
       if (!in_array($bucket, ['kiji', 'painted'], true)) fail('在庫の種類が不正です。');
       if ($qty < 1) fail('数量は1以上で入力してください。');
       $bucketLabel = $bucket === 'kiji' ? '木地在庫' : '完成在庫';
+      if ($bucket === 'painted' && $color === '') {
+        $st = $pdo->prepare("SELECT COUNT(*) c FROM lots WHERE product_id=? AND status='painted' AND color<>''");
+        $st->execute([$pid]);
+        if ((int)$st->fetch()['c'] > 0) {
+          fail('完成在庫にカラー別の在庫があるため、減らすカラーを指定してください。');
+        }
+      }
       if ($color !== '') {
         $avail = color_available($pid, $color);
         if ($qty > $avail) fail("完成在庫（{$color}）の残数は {$avail} です。それを超えて減らせません。");
@@ -373,7 +419,8 @@ try {
   }
 } catch (Throwable $e) {
   if ($pdo->inTransaction()) $pdo->rollBack();
-  fail('サーバーエラー: ' . $e->getMessage(), 500);
+  error_log('[inventory] ' . $action . ' failed: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+  fail('サーバーエラーが発生しました。時間をおいて再度お試しください。', 500);
 }
 
 function status_label(string $s): string {

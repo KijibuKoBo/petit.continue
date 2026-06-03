@@ -152,6 +152,7 @@ try {
       if (!in_array($status, $VALID_STATUS, true)) fail('状態の値が不正です。');
       $prod = resolve_product($pname, $category, $u);
       $dest = trim($b['dest'] ?? '');
+      if ($status === 'shipped' && $dest === '') fail('出荷済にするには出荷先を入力してください。');
       if ($dest !== '') ensure_destination($dest);
       $id = $b['id'] ?? '';
       $lot = null;
@@ -241,6 +242,48 @@ try {
       $p = product_by_id($lot['product_id']);
       $pdo->prepare('DELETE FROM lots WHERE id = ?')->execute([$id]);
       audit($u, 'delete', 'lot', $id, '生産予定を削除: ' . ($p['name'] ?? '') . " / {$lot['lot_no']} ×{$lot['qty']}");
+      json_out(['state' => get_state($u)]);
+    }
+
+    /* ── 塗装：木地ロットをカラー別に分割して完成在庫へ ── */
+    case 'paint_lot': {
+      $u = require_editor();
+      $b = body();
+      $kid = $b['id'] ?? '';
+      $items = $b['items'] ?? [];
+      $paintedDate = trim($b['paintedDate'] ?? '') ?: date('Y-m-d');
+      if (!is_array($items) || count($items) === 0) fail('塗装内訳を入力してください。');
+      $lot = lot_by_id($kid);
+      if (!$lot) fail('対象のロットが見つかりません。');
+      if ($lot['status'] !== 'kiji') fail('木地完成のロットのみ塗装に進められます。');
+      $total = 0; $clean = [];
+      foreach ($items as $it) {
+        $q = (int)($it['qty'] ?? 0);
+        if ($q < 1) fail('数量は1以上で入力してください。');
+        $color = trim($it['color'] ?? '');
+        $total += $q;
+        $clean[] = ['qty' => $q, 'color' => $color];
+      }
+      if ($total > (int)$lot['qty']) fail("木地在庫({$lot['qty']})を超える数量({$total})は塗装できません。");
+      $p = product_by_id($lot['product_id']);
+      $pdo->beginTransaction();
+      $remaining = (int)$lot['qty'] - $total;
+      if ($remaining <= 0) {
+        $pdo->prepare('DELETE FROM lots WHERE id=?')->execute([$kid]);
+      } else {
+        $pdo->prepare('UPDATE lots SET qty=?, updated_at=? WHERE id=?')->execute([$remaining, now(), $kid]);
+      }
+      $created = [];
+      foreach ($clean as $it) {
+        $nid = uuid();
+        $pdo->prepare('INSERT INTO lots (id, product_id, lot_no, qty, due_date, status, color, dest, note, kiji_date, painted_date, shipped_date, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+            ->execute([$nid, $lot['product_id'], $lot['lot_no'], $it['qty'], $lot['due_date'], 'painted', $it['color'], '', $lot['note'], $lot['kiji_date'], $paintedDate, '', now(), now()]);
+        $created[] = ($it['color'] !== '' ? $it['color'] : '無色') . '×' . $it['qty'];
+      }
+      $pdo->commit();
+      $audit_msg = '塗装: ' . ($p['name'] ?? '') . " / {$lot['lot_no']} → " . implode('、', $created)
+                 . ($remaining > 0 ? "（木地残 {$remaining}）" : '');
+      audit($u, 'status', 'lot', $kid, $audit_msg);
       json_out(['state' => get_state($u)]);
     }
 

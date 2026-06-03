@@ -148,7 +148,15 @@ td.center, th.center { text-align: center; }
 .lot-link { background: none; border: none; padding: 0; font-variant-numeric: tabular-nums; font-size: 0.8rem; cursor: pointer; color: var(--gold-dark); border-bottom: 1px dotted var(--gold); text-align: left; transition: color 0.15s; }
 .lot-link:hover { color: var(--charcoal); }
 .lot-link.muted { color: var(--muted); border-bottom-color: var(--line); font-style: italic; }
-.color-break { font-size: 0.7rem; color: var(--muted); margin-top: 3px; }
+.color-break { font-size: 0.72rem; color: var(--muted); margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.color-chip { display: inline-flex; align-items: baseline; gap: 3px; padding: 2px 8px; border-radius: 100px; background: var(--warm-white); border: 1px solid var(--line); color: var(--ink); }
+.color-chip b { font-weight: 600; color: var(--gold-dark); }
+.paint-row { display: grid; grid-template-columns: 1fr 110px 36px; gap: 10px; align-items: center; margin-bottom: 8px; }
+.paint-row select, .paint-row input { width: 100%; }
+.paint-row .x { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 4px 0; cursor: pointer; color: var(--bad); }
+.paint-sum { font-size: 0.85rem; color: var(--muted); margin-top: 6px; text-align: right; }
+.paint-sum b { color: var(--ink); }
+.paint-sum.over b { color: var(--bad); }
 .prod-link { background: none; border: none; padding: 0; font: inherit; cursor: pointer; color: var(--charcoal); font-weight: 500; text-align: left; border-bottom: 1px dotted var(--gold); transition: color 0.15s; }
 .prod-link:hover { color: var(--gold-dark); }
 .cat-row td { background: var(--cream); font-weight: 500; color: var(--gold-dark); letter-spacing: 0.04em; font-size: 0.78rem; padding: 9px 16px; }
@@ -676,7 +684,12 @@ const emptyMsg = (msg) => `<div class="empty"><div class="empty-icon">◇</div>$
 const colorBreakHtml = (pid) => {
   const m = finishedByColor(pid); const keys = Object.keys(m);
   if (!keys.length) return "";
-  return `<div class="color-break">${keys.map((c) => `${esc(c)}×${m[c]}`).join("　")}</div>`;
+  return `<div class="color-break">${keys.map((c) => `<span class="color-chip">${esc(c)}<b>×${m[c]}</b></span>`).join("")}</div>`;
+};
+const kijiLotsHtml = (pid) => {
+  const kl = state.lots.filter((l) => l.productId === pid && l.status === "kiji");
+  if (!kl.length) return "";
+  return `<div class="color-break muted">${kl.map((l) => `<span>${l.lotNo ? esc(l.lotNo) + " " : ""}×${l.qty}</span>`).join("　")}</div>`;
 };
 
 function renderDashboard() {
@@ -739,30 +752,24 @@ function renderDashboard() {
 
 function renderProduction() {
   const canEdit = isEditor();
-  const filter = document.getElementById("prod-filter").value;
-  let rows = [...state.lots].sort((a, b) => (b.dueDate || "").localeCompare(a.dueDate || ""));
-  if (filter !== "all") rows = rows.filter((l) => l.status === filter);
+  /* 「生産予定」は予定（未着手）のロットだけを表示。木地完成以降は在庫・製品タブから扱う。 */
+  let rows = state.lots.filter((l) => l.status === "planned")
+    .sort((a, b) => (a.dueDate || "9999").localeCompare(b.dueDate || "9999"));
   const el = document.getElementById("production-table");
-  if (!rows.length) { el.innerHTML = emptyMsg("該当する生産予定はありません。"); return; }
+  if (!rows.length) { el.innerHTML = emptyMsg("未着手の生産予定はありません。"); return; }
   const body = rows.map((l) => {
-    const p = productById(l.productId); const st = STATUS[l.status];
-    const overdue = l.dueDate && l.dueDate < todayStr() && l.status !== "shipped";
-    const statusCell = canEdit
-      ? `<select data-action="set-status" data-id="${l.id}">${STATUS_ORDER.map((k) => `<option value="${k}" ${k === l.status ? "selected" : ""}>${STATUS[k].label}</option>`).join("")}</select>`
-      : `<span class="badge ${st.cls}">${st.label}</span>`;
+    const p = productById(l.productId);
+    const overdue = l.dueDate && l.dueDate < todayStr();
     return `<tr>
       <td>${esc(fmtDate(l.dueDate))} ${overdue ? '<span class="badge bad" style="margin-left:6px;">遅延</span>' : ""}</td>
       <td>${l.lotNo ? `<span class="lotno">${esc(l.lotNo)}</span>` : '<span class="muted">—</span>'}</td>
       <td><div class="prod-name">${esc(p ? p.name : "（削除済）")}</div><div class="prod-cat">${esc(p ? (p.category || "未分類") : "")}</div></td>
       <td class="num strong-num">${num(l.qty)}</td>
-      <td class="center">${statusCell}</td>
-      <td>${l.color ? `<span class="chip">${esc(l.color)}</span>` : '<span class="muted">—</span>'}</td>
-      <td>${esc(l.dest || "—")}</td>
       <td class="muted">${esc(l.note || "")}</td>
-      ${canEdit ? `<td class="row-actions"><button class="btn sm ghost" data-action="edit-lot" data-id="${l.id}">編集</button><button class="btn sm ghost danger" data-action="delete-lot" data-id="${l.id}">削除</button></td>` : ""}
+      ${canEdit ? `<td class="row-actions"><button class="btn sm" data-action="finish-kiji" data-id="${l.id}" title="木地完成にする">木地完成</button><button class="btn sm ghost" data-action="edit-lot" data-id="${l.id}">編集</button><button class="btn sm ghost danger" data-action="delete-lot" data-id="${l.id}">削除</button></td>` : ""}
     </tr>`;
   }).join("");
-  el.innerHTML = `<table><thead><tr><th>完成予定日</th><th>ロット番号</th><th>製品</th><th class="num">数量</th><th class="center">状態</th><th>カラー</th><th>出荷先</th><th>メモ</th>${canEdit ? "<th></th>" : ""}</tr></thead><tbody>${body}</tbody></table>`;
+  el.innerHTML = `<table><thead><tr><th>完成予定日</th><th>ロット番号</th><th>製品</th><th class="num">数量</th><th>メモ</th>${canEdit ? "<th></th>" : ""}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
 function renderShipments() {
@@ -799,7 +806,7 @@ function renderInventory() {
   const canEdit = isEditor();
   syncInvFilter();
   const filter = document.getElementById("inv-filter").value;
-  const colspan = canEdit ? 9 : 8;
+  const colspan = canEdit ? 7 : 6;
   const el = document.getElementById("inventory-table");
   if (!state.products.length) { el.innerHTML = emptyMsg("製品が登録されていません。"); return; }
   const groups = {};
@@ -812,21 +819,21 @@ function renderInventory() {
     const head = `<tr class="cat-row"><td colspan="${colspan}">${esc(c)}<span class="cat-count">${prods.length} 品目</span></td></tr>`;
     const rows = prods.map((p) => {
       const st = stockState(p.id);
+      const kQty = rawStock(p.id);
+      const fQty = finishedStock(p.id);
       return `<tr>
         <td><button class="prod-link" data-action="product-detail" data-id="${p.id}">${esc(p.name)}</button></td>
-        <td class="num muted">${num(rawStock(p.id))}</td>
-        <td class="num"><span class="strong-num">${num(finishedStock(p.id))}</span>${colorBreakHtml(p.id)}</td>
-        <td class="num muted">${num(p.safetyStock)}</td>
+        <td class="num"><span class="strong-num muted">${num(kQty)}</span>${kijiLotsHtml(p.id)}</td>
+        <td class="num"><span class="strong-num">${num(fQty)}</span>${colorBreakHtml(p.id)}</td>
         <td class="num muted">${num(plannedQty(p.id))}</td>
-        <td class="num">${num(projectedStock(p.id))}</td>
         <td class="center"><span class="badge ${st.key}">${st.label}</span></td>
         <td class="center"><button class="btn sm ghost" data-action="product-detail" data-id="${p.id}">明細</button></td>
-        ${canEdit ? `<td class="row-actions"><button class="btn sm ghost" data-action="new-loss" data-id="${p.id}">破損</button><button class="btn sm ghost" data-action="edit-product" data-id="${p.id}">編集</button><button class="btn sm ghost danger" data-action="delete-product" data-id="${p.id}">削除</button></td>` : ""}
+        ${canEdit ? `<td class="row-actions">${kQty > 0 ? `<button class="btn sm ghost" data-action="new-paint" data-id="${p.id}" title="木地在庫を塗装する">塗装</button>` : ""}<button class="btn sm ghost" data-action="edit-product" data-id="${p.id}">編集</button><button class="btn sm ghost danger" data-action="delete-product" data-id="${p.id}">削除</button></td>` : ""}
       </tr>`;
     }).join("");
     return head + rows;
   }).join("");
-  el.innerHTML = `<table><thead><tr><th>製品名</th><th class="num">木地在庫</th><th class="num">完成在庫</th><th class="num">安全在庫</th><th class="num">予定</th><th class="num">予測在庫</th><th class="center">状態</th><th class="center">明細</th>${canEdit ? "<th></th>" : ""}</tr></thead><tbody>${body}</tbody></table>`;
+  el.innerHTML = `<table><thead><tr><th>製品名</th><th class="num">木地在庫</th><th class="num">在庫（完成）</th><th class="num">予定</th><th class="center">状態</th><th class="center">明細</th>${canEdit ? "<th></th>" : ""}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
 function renderUsers() {
@@ -1020,6 +1027,11 @@ function openProductDetail(pid) {
         : (canEditLot
             ? `<button class="lot-link muted" data-action="edit-lot" data-id="${l.id}" title="クリックして編集">（番号なし／編集）</button>`
             : '<span class="muted">—</span>');
+      const stageBtn = canEditLot
+        ? (l.status === "kiji" ? `<button class="btn sm" data-action="new-paint" data-id="${pid}" data-lot="${l.id}" title="このロットを塗装する">塗装</button>`
+           : l.status === "painted" ? `<button class="btn sm" data-action="new-ship" data-id="${l.id}" title="このロットを出荷する">出荷</button>`
+           : "")
+        : "";
       return `<tr>
         <td>${lotCell}</td>
         <td class="num strong-num">${num(l.qty)}</td>
@@ -1031,9 +1043,10 @@ function openProductDetail(pid) {
         <td>${esc(fmtDate(l.shippedDate))}</td>
         <td>${esc(l.dest || "—")}</td>
         <td class="muted">${esc(l.note || "")}</td>
+        ${canEditLot ? `<td class="row-actions">${stageBtn}</td>` : ""}
       </tr>`;
     }).join("");
-    table = `<div class="table-wrap"><table><thead><tr><th>ロット番号</th><th class="num">数量</th><th class="center">状態</th><th>カラー</th><th>完成予定日</th><th>木地完成日</th><th>塗装済日</th><th>出荷日</th><th>出荷先</th><th>メモ</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    table = `<div class="table-wrap"><table><thead><tr><th>ロット番号</th><th class="num">数量</th><th class="center">状態</th><th>カラー</th><th>完成予定日</th><th>木地完成日</th><th>塗装済日</th><th>出荷日</th><th>出荷先</th><th>メモ</th>${isEditor() ? "<th></th>" : ""}</tr></thead><tbody>${rows}</tbody></table></div>`;
   }
   let lossTable = "";
   if (losses.length) {
@@ -1106,6 +1119,75 @@ async function saveLoss(pid) {
   try {
     const d = await api("record_loss", { productId: pid, bucket, qty, color, lossDate, reason });
     state = d.state; closeModal(); reopenDetailOrRender(); toast("破損・ロスを記録しました");
+  } catch (e) { err.textContent = e.message; }
+}
+
+/* 塗装フォーム：木地ロットを選び、カラー別に数量を振り分けて完成在庫へ */
+function openPaintForm(pid, prefillLotId) {
+  const p = productById(pid);
+  if (!p) return;
+  const kijiLots = state.lots.filter((l) => l.productId === pid && l.status === "kiji")
+    .sort((a, b) => (a.kijiDate || "").localeCompare(b.kijiDate || ""));
+  if (!kijiLots.length) { toast("木地在庫がありません", true); return; }
+  const initialLot = (prefillLotId && kijiLots.find((l) => l.id === prefillLotId)) || kijiLots[0];
+  const lotOpts = kijiLots.map((l) => `<option value="${l.id}" ${l.id === initialLot.id ? "selected" : ""}>${l.lotNo ? esc(l.lotNo) + " " : ""}×${l.qty}${l.kijiDate ? "（木地完成 " + fmtDate(l.kijiDate) + "）" : ""}</option>`).join("");
+  openModal(`
+    <div class="modal-head"><h3>塗装する：${esc(p.name)}</h3><p>木地在庫からカラー別に振り分けて完成在庫に移します。一本ずつ違う色でもOKです。</p></div>
+    <div class="modal-body">
+      <div class="field-row">
+        <div class="field-group"><label class="field">木地ロット</label><select id="pa-lot">${lotOpts}</select></div>
+        <div class="field-group"><label class="field">塗装日</label><input type="date" id="pa-date" value="${todayStr()}"></div>
+      </div>
+      <div style="margin-top:10px;"><label class="field">塗装後の内訳（カラー別）</label></div>
+      <datalist id="paint-color-list">${COLORS.map((c) => `<option value="${esc(c)}">`).join("")}</datalist>
+      <div id="pa-rows"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+        <button type="button" class="btn ghost sm" id="pa-add">＋ カラー行を追加</button>
+        <div class="paint-sum" id="pa-sum"></div>
+      </div>
+      <div class="form-error" id="pa-err"></div>
+    </div>
+    <div class="modal-foot"><button class="btn ghost" data-action="close">キャンセル</button><button class="btn" data-action="save-paint">塗装する</button></div>`);
+  /* 行追加ヘルパ */
+  const rowsEl = document.getElementById("pa-rows");
+  const sumEl = document.getElementById("pa-sum");
+  const lotSel = document.getElementById("pa-lot");
+  function currentLot() { return kijiLots.find((l) => l.id === lotSel.value) || initialLot; }
+  function addRow(color, qty) {
+    const div = document.createElement("div");
+    div.className = "paint-row";
+    div.innerHTML = `<input type="text" class="pa-color" list="paint-color-list" value="${esc(color || "")}" placeholder="カラー（自由入力）"><input type="number" class="pa-qty" min="1" step="1" value="${qty || 1}"><button type="button" class="x" title="この行を削除">×</button>`;
+    div.querySelector(".x").addEventListener("click", () => { div.remove(); updateSum(); });
+    div.querySelectorAll("input").forEach((el) => el.addEventListener("input", updateSum));
+    rowsEl.appendChild(div);
+    updateSum();
+  }
+  function updateSum() {
+    const total = [...rowsEl.querySelectorAll(".pa-qty")].reduce((s, i) => s + (parseInt(i.value, 10) || 0), 0);
+    const max = currentLot().qty;
+    const over = total > max;
+    sumEl.classList.toggle("over", over);
+    sumEl.innerHTML = `合計 <b>${total}</b> / 木地 ${max}` + (over ? "（超過）" : (total < max ? `<span class="muted">（残 ${max - total} は木地のまま）</span>` : "（全数塗装）"));
+  }
+  document.getElementById("pa-add").addEventListener("click", () => addRow("", 1));
+  lotSel.addEventListener("change", updateSum);
+  /* デフォルトは1行：選択された色なし＋数量＝ロット全数 */
+  addRow("", initialLot.qty);
+}
+async function savePaint() {
+  const lotId = document.getElementById("pa-lot").value;
+  const paintedDate = document.getElementById("pa-date").value;
+  const rows = [...document.querySelectorAll("#pa-rows .paint-row")];
+  const items = rows.map((r) => ({
+    color: r.querySelector(".pa-color").value,
+    qty: parseInt(r.querySelector(".pa-qty").value, 10) || 0,
+  })).filter((i) => i.qty > 0);
+  const err = document.getElementById("pa-err");
+  if (!items.length) { err.textContent = "少なくとも1行は数量を入力してください。"; return; }
+  try {
+    const d = await api("paint_lot", { id: lotId, items, paintedDate });
+    state = d.state; closeModal(); reopenDetailOrRender();
+    toast("塗装しました：" + items.map((i) => (i.color || "無色") + "×" + i.qty).join("、"));
   } catch (e) { err.textContent = e.message; }
 }
 
@@ -1206,6 +1288,7 @@ const EDITOR_ACTIONS = new Set([
   "new-product", "edit-product", "save-product", "delete-product",
   "new-lot", "edit-lot", "save-lot", "delete-lot",
   "new-loss", "save-loss", "del-loss",
+  "new-paint", "save-paint", "finish-kiji", "new-ship",
   "new-user", "edit-user", "save-user", "delete-user",
   "export-json", "import-json", "reset", "clear-all",
 ]);
@@ -1239,6 +1322,22 @@ document.body.addEventListener("click", (e) => {
       break;
     case "new-loss": openLossForm(id); break;
     case "save-loss": saveLoss(id); break;
+    case "new-paint": openPaintForm(id, el.dataset.lot); break;
+    case "save-paint": savePaint(); break;
+    case "new-ship": promptShip(id); break;
+    case "finish-kiji": {
+      const lot = state.lots.find((x) => x.id === id);
+      if (!lot) break;
+      const proceed = window.confirm(`「${lot.lotNo || "（番号なし）"}」×${lot.qty} を木地完成にします。よろしいですか？`);
+      if (!proceed) break;
+      (async () => {
+        try {
+          const d = await api("set_status", { id, status: "kiji" });
+          state = d.state; render(); toast("木地完成にしました");
+        } catch (e) { toast(e.message, true); }
+      })();
+      break;
+    }
     case "del-loss":
       confirmModal("破損記録を取消", "この破損・ロス記録を取り消します（在庫が戻ります）。よろしいですか？",
         async () => { const d = await api("delete_loss", { id }); state = d.state; closeModal(); reopenDetailOrRender(); toast("破損記録を取り消しました"); });

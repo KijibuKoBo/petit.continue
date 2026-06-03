@@ -285,7 +285,7 @@ body.locked .app-header, body.locked main { display: none; }
     <div class="view-head">
       <div>
         <h1 class="view-title">ダッシュボード</h1>
-        <p class="view-sub">木地完成で木地在庫、塗装済で完成在庫に。完成在庫が安全在庫を下回るとアラート表示。</p>
+        <p class="view-sub">木地完成で木地在庫、塗装済で在庫に。在庫が安全在庫を下回るとアラート表示。</p>
       </div>
       <div class="toolbar editor-only">
         <button class="btn" data-action="new-lot">＋ 生産予定を追加</button>
@@ -340,7 +340,7 @@ body.locked .app-header, body.locked main { display: none; }
     <div class="view-head">
       <div>
         <h1 class="view-title">在庫・製品マスタ</h1>
-        <p class="view-sub">木地在庫＝木地完成の数量。完成在庫＝塗装済の数量。予測在庫＝木地＋完成＋予定。製品名をクリックでロット別の明細を表示します。</p>
+        <p class="view-sub">木地在庫＝木地完成の数量。在庫＝塗装済の数量（出荷可能）。製品名をクリックでロット別の明細を表示します。</p>
       </div>
       <div class="toolbar">
         <select id="inv-filter"><option value="all">すべてのカテゴリ</option></select>
@@ -698,13 +698,13 @@ function renderDashboard() {
   const alerts = state.products.filter((p) => stockState(p.id).key !== "ok");
 
   document.getElementById("dash-banner").innerHTML = alerts.length
-    ? `<div class="alert-banner">⚠ 完成在庫が不足している製品が <strong>&nbsp;${alerts.length}&nbsp;</strong> 件あります。</div>`
+    ? `<div class="alert-banner">⚠ 在庫が不足している製品が <strong>&nbsp;${alerts.length}&nbsp;</strong> 件あります。</div>`
     : `<div class="alert-banner none">✓ すべての製品が安全在庫を満たしています。</div>`;
 
   document.getElementById("kpi-grid").innerHTML = `
     <div class="kpi"><div class="kpi-label">登録製品数</div><div class="kpi-value">${num(state.products.length)}<small>品目</small></div><div class="kpi-note">マスタ登録された製品</div></div>
-    <div class="kpi"><div class="kpi-label">完成在庫</div><div class="kpi-value">${num(totalFin)}<small>点</small></div><div class="kpi-note">塗装済・出荷可能</div></div>
-    <div class="kpi"><div class="kpi-label">木地在庫</div><div class="kpi-value">${num(totalRaw)}<small>点</small></div><div class="kpi-note">塗装すると完成在庫に</div></div>
+    <div class="kpi"><div class="kpi-label">木地在庫</div><div class="kpi-value">${num(totalRaw)}<small>点</small></div><div class="kpi-note">塗装すると在庫に</div></div>
+    <div class="kpi"><div class="kpi-label">在庫</div><div class="kpi-value">${num(totalFin)}<small>点</small></div><div class="kpi-note">塗装済・出荷可能</div></div>
     <div class="kpi ${alerts.length ? "alert" : ""}"><div class="kpi-label">要対応</div><div class="kpi-value">${num(alerts.length)}<small>品目</small></div><div class="kpi-note">欠品・要補充の製品</div></div>`;
 
   document.getElementById("alert-count").textContent = `${alerts.length} 件`;
@@ -717,15 +717,15 @@ function renderDashboard() {
       const st = stockState(p.id);
       return `<tr>
         <td><div class="prod-name">${esc(p.name)}</div><div class="prod-cat">${esc(p.category || "未分類")}</div></td>
+        <td class="num muted">${num(rawStock(p.id))}</td>
         <td class="num strong-num">${num(finishedStock(p.id))}</td>
         <td class="num muted">${num(p.safetyStock)}</td>
-        <td class="num muted">${num(rawStock(p.id))}</td>
         <td class="num muted">${num(plannedQty(p.id))}</td>
         <td class="center"><span class="badge ${st.key}">${st.label}</span></td>
         ${canEdit ? `<td class="row-actions"><button class="btn sm" data-action="new-lot" data-pid="${p.id}">生産予定を追加</button></td>` : ""}
       </tr>`;
     }).join("");
-    alertEl.innerHTML = `<table><thead><tr><th>製品</th><th class="num">完成在庫</th><th class="num">安全在庫</th><th class="num">木地在庫</th><th class="num">予定</th><th class="center">状態</th>${canEdit ? "<th></th>" : ""}</tr></thead><tbody>${rows}</tbody></table>`;
+    alertEl.innerHTML = `<table><thead><tr><th>製品</th><th class="num">木地在庫</th><th class="num">在庫</th><th class="num">安全在庫</th><th class="num">予定</th><th class="center">状態</th>${canEdit ? "<th></th>" : ""}</tr></thead><tbody>${rows}</tbody></table>`;
   }
 
   const upcoming = state.lots.filter((l) => l.status !== "shipped")
@@ -1244,7 +1244,7 @@ function download(filename, text, type) {
 }
 function exportJSON() { download(`petit-continue-inventory-${todayStr()}.json`, JSON.stringify(state, null, 2)); toast("JSONを書き出しました"); }
 function exportCSV() {
-  const header = ["製品名", "カテゴリ", "木地在庫", "完成在庫", "安全在庫", "予定", "予測在庫", "状態"];
+  const header = ["製品名", "カテゴリ", "木地在庫", "在庫", "安全在庫", "予定", "予測在庫", "状態"];
   const lines = state.products.map((p) => [p.name, p.category || "", rawStock(p.id), finishedStock(p.id), p.safetyStock, plannedQty(p.id), projectedStock(p.id), stockState(p.id).label]
     .map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","));
   download(`petit-continue-stock-${todayStr()}.csv`, "﻿" + [header.join(","), ...lines].join("\r\n"), "text/csv");

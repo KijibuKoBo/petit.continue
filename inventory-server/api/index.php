@@ -19,7 +19,7 @@ try {
 
 /* CSRF: 公開アクション以外は X-CSRF-Token ヘッダ必須 */
 csrf_token(); // ensure session token exists
-$PUBLIC_ACTIONS = ['me', 'login', 'setup'];
+$PUBLIC_ACTIONS = ['me', 'login', 'setup', 'restore'];
 if (!in_array($action, $PUBLIC_ACTIONS, true)) {
   require_csrf();
 }
@@ -133,6 +133,7 @@ try {
       $pdo->beginTransaction();
       $pdo->prepare('DELETE FROM lots WHERE product_id = ?')->execute([$id]);
       $pdo->prepare('DELETE FROM losses WHERE product_id = ?')->execute([$id]);
+      $pdo->prepare('DELETE FROM paint_instructions WHERE product_id = ?')->execute([$id]);
       $pdo->prepare('DELETE FROM products WHERE id = ?')->execute([$id]);
       $pdo->commit();
       audit($u, 'delete', 'product', $id, '製品を削除: ' . $p['name']);
@@ -252,6 +253,7 @@ try {
       $kid = $b['id'] ?? '';
       $items = $b['items'] ?? [];
       $paintedDate = trim($b['paintedDate'] ?? '') ?: date('Y-m-d');
+      $shipBy = trim($b['shipBy'] ?? '');
       if (!is_array($items) || count($items) === 0) fail('塗装内訳を入力してください。');
       $lot = lot_by_id($kid);
       if (!$lot) fail('対象のロットが見つかりません。');
@@ -280,11 +282,16 @@ try {
             ->execute([$nid, $lot['product_id'], $lot['lot_no'], $it['qty'], $lot['due_date'], 'painted', $it['color'], '', $lot['note'], $lot['kiji_date'], $paintedDate, '', now(), now()]);
         $created[] = ($it['color'] !== '' ? $it['color'] : '無色') . '×' . $it['qty'];
       }
+      /* 塗装指示を記録：印刷・再印刷・履歴として残す */
+      $instId = uuid();
+      $pdo->prepare('INSERT INTO paint_instructions (id, product_id, kiji_lot_no, kiji_date, paint_date, ship_by, items_json, total_qty, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
+          ->execute([$instId, $lot['product_id'], $lot['lot_no'], $lot['kiji_date'], $paintedDate, $shipBy, json_encode($clean, JSON_UNESCAPED_UNICODE), $total, $u['email'], now()]);
       $pdo->commit();
-      $audit_msg = '塗装: ' . ($p['name'] ?? '') . " / {$lot['lot_no']} → " . implode('、', $created)
-                 . ($remaining > 0 ? "（木地残 {$remaining}）" : '');
+      $audit_msg = '塗装指示: ' . ($p['name'] ?? '') . " / {$lot['lot_no']} → " . implode('、', $created)
+                 . ($remaining > 0 ? "（木地残 {$remaining}）" : '')
+                 . ($shipBy !== '' ? "［出荷予定 {$shipBy}］" : '');
       audit($u, 'status', 'lot', $kid, $audit_msg);
-      json_out(['state' => get_state($u)]);
+      json_out(['state' => get_state($u), 'instructionId' => $instId]);
     }
 
     /* ── 破損・ロス ── */
@@ -403,6 +410,7 @@ try {
       $u = require_editor();
       if ((body()['pin'] ?? '') !== RESET_PIN) fail('パスワードが違います。', 403);
       $pdo->exec('DELETE FROM losses');
+      $pdo->exec('DELETE FROM paint_instructions');
       $pdo->exec('DELETE FROM lots');
       $pdo->exec('DELETE FROM products');
       $pdo->exec('DELETE FROM destinations');
@@ -414,6 +422,7 @@ try {
       $u = require_editor();
       if ((body()['pin'] ?? '') !== RESET_PIN) fail('パスワードが違います。', 403);
       $pdo->exec('DELETE FROM losses');
+      $pdo->exec('DELETE FROM paint_instructions');
       $pdo->exec('DELETE FROM lots');
       $pdo->exec('DELETE FROM products');
       $pdo->exec('DELETE FROM destinations');
@@ -421,40 +430,42 @@ try {
       json_out(['state' => get_state($u)]);
     }
 
-    /* ── バックアップ取り込み（製品・ロット・出荷先を置換）── */
+    /* ── 完全バックアップ（移行用：ユーザーのパスワードハッシュも含む）── */
+    case 'export': {
+      $u = require_editor();
+      $userRows = $pdo->query('SELECT id, email, name, role, pass_hash, created_at FROM users ORDER BY created_at')->fetchAll();
+      $data = [
+        'version' => 2,
+        'exportedAt' => now(),
+        'products' => array_map('map_product', $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll()),
+        'lots' => array_map('map_lot', $pdo->query('SELECT * FROM lots')->fetchAll()),
+        'losses' => array_map('map_loss', $pdo->query('SELECT * FROM losses ORDER BY created_at DESC')->fetchAll()),
+        'paintInstructions' => array_map('map_paint_instruction', $pdo->query('SELECT * FROM paint_instructions ORDER BY created_at DESC')->fetchAll()),
+        'destinations' => array_map(fn($r) => $r['name'], $pdo->query('SELECT name FROM destinations ORDER BY name')->fetchAll()),
+        'users' => array_map(fn($r) => ['id' => $r['id'], 'email' => $r['email'], 'name' => $r['name'], 'role' => $r['role'], 'passHash' => $r['pass_hash'], 'createdAt' => $r['created_at']], $userRows),
+      ];
+      audit($u, 'export', 'system', '', '完全バックアップを書き出し');
+      json_out($data);
+    }
+
+    /* ── バックアップから復元（ログイン済み・既存データを置き換え）── */
     case 'import': {
       $u = require_editor();
       $d = body()['data'] ?? null;
       if (!is_array($d) || !isset($d['products']) || !is_array($d['products'])) fail('形式が不正です。');
-      $pdo->beginTransaction();
-      $pdo->exec('DELETE FROM losses');
-      $pdo->exec('DELETE FROM lots');
-      $pdo->exec('DELETE FROM products');
-      $pdo->exec('DELETE FROM destinations');
-      $ip = $pdo->prepare('INSERT INTO products (id, name, category, safety_stock, created_at, updated_at) VALUES (?,?,?,?,?,?)');
-      $validIds = [];
-      foreach ($d['products'] as $p) {
-        if (empty($p['name'])) continue;
-        $pid = !empty($p['id']) ? (string)$p['id'] : uuid();
-        $validIds[$pid] = true;
-        $ip->execute([$pid, $p['name'], $p['category'] ?? '', max(0, (int)($p['safetyStock'] ?? 0)), now(), now()]);
-      }
-      $il = $pdo->prepare('INSERT INTO lots (id, product_id, lot_no, qty, due_date, status, color, dest, note, kiji_date, painted_date, shipped_date, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-      foreach (($d['lots'] ?? []) as $l) {
-        if (empty($l['productId']) || !isset($validIds[$l['productId']])) continue;
-        $status = in_array($l['status'] ?? '', $VALID_STATUS, true) ? $l['status'] : 'planned';
-        $il->execute([!empty($l['id']) ? (string)$l['id'] : uuid(), $l['productId'], $l['lotNo'] ?? '', max(0, (int)($l['qty'] ?? 0)), $l['dueDate'] ?? '', $status, $l['color'] ?? '', $l['dest'] ?? '', $l['note'] ?? '', $l['kijiDate'] ?? '', $l['paintedDate'] ?? '', $l['shippedDate'] ?? '', now(), now()]);
-      }
-      $iloss = $pdo->prepare('INSERT INTO losses (id, product_id, bucket, qty, color, loss_date, reason, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)');
-      foreach (($d['losses'] ?? []) as $x) {
-        if (empty($x['productId']) || !isset($validIds[$x['productId']])) continue;
-        $bucket = in_array($x['bucket'] ?? '', ['kiji', 'painted'], true) ? $x['bucket'] : 'kiji';
-        $iloss->execute([!empty($x['id']) ? (string)$x['id'] : uuid(), $x['productId'], $bucket, max(0, (int)($x['qty'] ?? 0)), $x['color'] ?? '', $x['lossDate'] ?? '', $x['reason'] ?? '', $x['createdBy'] ?? '', now()]);
-      }
-      foreach (($d['destinations'] ?? []) as $name) ensure_destination((string)$name);
-      $pdo->commit();
-      audit($u, 'import', 'system', '', 'バックアップJSONを取り込み');
+      import_backup($pdo, $d, $VALID_STATUS, false /* users not replaced when importing logged in */);
+      audit($u, 'import', 'system', '', 'バックアップを取り込み');
       json_out(['state' => get_state($u)]);
+    }
+
+    /* ── 別サーバーへの引越し：ユーザーが未作成の状態でフルバックアップから復元 ── */
+    case 'restore': {
+      $count = (int)$pdo->query('SELECT COUNT(*) c FROM users')->fetch()['c'];
+      if ($count > 0) fail('既に管理者が存在します。ログイン後「データ管理 → 取り込み」をご利用ください。', 403);
+      $d = body()['data'] ?? null;
+      if (!is_array($d) || empty($d['users']) || !is_array($d['users'])) fail('ユーザー情報を含むバックアップが必要です。');
+      import_backup($pdo, $d, $VALID_STATUS, true /* replace users */);
+      json_out(['ok' => true, 'restoredUsers' => count($d['users']), 'restoredProducts' => count($d['products'] ?? [])]);
     }
 
     default:

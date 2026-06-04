@@ -75,17 +75,76 @@ function map_loss(array $r): array {
   ];
 }
 
+function map_paint_instruction(array $r): array {
+  return [
+    'id' => $r['id'], 'productId' => $r['product_id'],
+    'kijiLotNo' => $r['kiji_lot_no'] ?? '', 'kijiDate' => $r['kiji_date'] ?? '',
+    'paintDate' => $r['paint_date'] ?? '', 'shipBy' => $r['ship_by'] ?? '',
+    'items' => json_decode($r['items_json'] ?? '[]', true) ?: [],
+    'totalQty' => (int)($r['total_qty'] ?? 0),
+    'createdBy' => $r['created_by'] ?? '', 'createdAt' => $r['created_at'] ?? '',
+  ];
+}
+
+/* バックアップJSONから全テーブルを復元。$replaceUsers=true のときはユーザーも置換（移行用）。 */
+function import_backup(PDO $pdo, array $d, array $validStatus, bool $replaceUsers): void {
+  $pdo->beginTransaction();
+  $pdo->exec('DELETE FROM losses');
+  $pdo->exec('DELETE FROM paint_instructions');
+  $pdo->exec('DELETE FROM lots');
+  $pdo->exec('DELETE FROM products');
+  $pdo->exec('DELETE FROM destinations');
+  if ($replaceUsers) {
+    $pdo->exec('DELETE FROM users');
+    $iu = $pdo->prepare('INSERT INTO users (id, email, name, role, pass_hash, created_at) VALUES (?,?,?,?,?,?)');
+    foreach (($d['users'] ?? []) as $u) {
+      if (empty($u['email']) || empty($u['passHash'])) continue;
+      $role = in_array($u['role'] ?? '', ['editor', 'viewer'], true) ? $u['role'] : 'viewer';
+      $iu->execute([!empty($u['id']) ? (string)$u['id'] : uuid(), strtolower($u['email']), $u['name'] ?? '', $role, $u['passHash'], $u['createdAt'] ?? now()]);
+    }
+  }
+  $ip = $pdo->prepare('INSERT INTO products (id, name, category, safety_stock, created_at, updated_at) VALUES (?,?,?,?,?,?)');
+  $validIds = [];
+  foreach (($d['products'] ?? []) as $p) {
+    if (empty($p['name'])) continue;
+    $pid = !empty($p['id']) ? (string)$p['id'] : uuid();
+    $validIds[$pid] = true;
+    $ip->execute([$pid, $p['name'], $p['category'] ?? '', max(0, (int)($p['safetyStock'] ?? 0)), now(), now()]);
+  }
+  $il = $pdo->prepare('INSERT INTO lots (id, product_id, lot_no, qty, due_date, status, color, dest, note, kiji_date, painted_date, shipped_date, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+  foreach (($d['lots'] ?? []) as $l) {
+    if (empty($l['productId']) || !isset($validIds[$l['productId']])) continue;
+    $status = in_array($l['status'] ?? '', $validStatus, true) ? $l['status'] : 'planned';
+    $il->execute([!empty($l['id']) ? (string)$l['id'] : uuid(), $l['productId'], $l['lotNo'] ?? '', max(0, (int)($l['qty'] ?? 0)), $l['dueDate'] ?? '', $status, $l['color'] ?? '', $l['dest'] ?? '', $l['note'] ?? '', $l['kijiDate'] ?? '', $l['paintedDate'] ?? '', $l['shippedDate'] ?? '', now(), now()]);
+  }
+  $iloss = $pdo->prepare('INSERT INTO losses (id, product_id, bucket, qty, color, loss_date, reason, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)');
+  foreach (($d['losses'] ?? []) as $x) {
+    if (empty($x['productId']) || !isset($validIds[$x['productId']])) continue;
+    $bucket = in_array($x['bucket'] ?? '', ['kiji', 'painted'], true) ? $x['bucket'] : 'kiji';
+    $iloss->execute([!empty($x['id']) ? (string)$x['id'] : uuid(), $x['productId'], $bucket, max(0, (int)($x['qty'] ?? 0)), $x['color'] ?? '', $x['lossDate'] ?? '', $x['reason'] ?? '', $x['createdBy'] ?? '', now()]);
+  }
+  $ipi = $pdo->prepare('INSERT INTO paint_instructions (id, product_id, kiji_lot_no, kiji_date, paint_date, ship_by, items_json, total_qty, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)');
+  foreach (($d['paintInstructions'] ?? []) as $pi) {
+    if (empty($pi['productId']) || !isset($validIds[$pi['productId']])) continue;
+    $itemsJ = is_array($pi['items'] ?? null) ? json_encode($pi['items'], JSON_UNESCAPED_UNICODE) : '[]';
+    $ipi->execute([!empty($pi['id']) ? (string)$pi['id'] : uuid(), $pi['productId'], $pi['kijiLotNo'] ?? '', $pi['kijiDate'] ?? '', $pi['paintDate'] ?? '', $pi['shipBy'] ?? '', $itemsJ, max(0, (int)($pi['totalQty'] ?? 0)), $pi['createdBy'] ?? '', $pi['createdAt'] ?? now()]);
+  }
+  foreach (($d['destinations'] ?? []) as $name) ensure_destination((string)$name);
+  $pdo->commit();
+}
+
 function get_state(array $user): array {
   $pdo = db();
   $products = array_map('map_product', $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll());
   $lots = array_map('map_lot', $pdo->query('SELECT * FROM lots')->fetchAll());
   $losses = array_map('map_loss', $pdo->query('SELECT * FROM losses ORDER BY loss_date DESC, created_at DESC')->fetchAll());
+  $paintInstructions = array_map('map_paint_instruction', $pdo->query('SELECT * FROM paint_instructions ORDER BY created_at DESC LIMIT 500')->fetchAll());
   $destinations = array_map(fn($r) => $r['name'], $pdo->query('SELECT name FROM destinations ORDER BY name')->fetchAll());
   $users = [];
   if ($user['role'] === 'editor') {
     $users = $pdo->query('SELECT id, email, name, role FROM users ORDER BY created_at')->fetchAll();
   }
-  return ['products' => $products, 'lots' => $lots, 'losses' => $losses, 'destinations' => $destinations, 'users' => $users];
+  return ['products' => $products, 'lots' => $lots, 'losses' => $losses, 'paintInstructions' => $paintInstructions, 'destinations' => $destinations, 'users' => $users];
 }
 
 /* バケット（kiji/painted）の現在の利用可能在庫 = ロット合計 − 破損合計 */

@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>再建 — 中小企業再建シミュレーション</title>
+<meta name="description" content="物価高・人手不足・円安・金利上昇・DX——2026年の社会情勢を反映した中小企業の経営再建シミュレーションゲーム。">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0f1419; --panel:#1a212b; --panel2:#222c38; --line:#2e3a48;
+  --ink:#e9eef4; --muted:#94a3b4; --gold:#d4a857; --gold2:#f0c674;
+  --green:#5cc98a; --red:#e0655f; --blue:#5aa9e6; --purple:#a98bd6;
+  --font:'Hiragino Kaku Gothic ProN','Yu Gothic',Meiryo,system-ui,sans-serif;
+}
+html{font-size:16px}
+body{font-family:var(--font);background:var(--bg);color:var(--ink);line-height:1.6;
+  background-image:radial-gradient(circle at 20% -10%,rgba(212,168,87,.08),transparent 40%),
+                   radial-gradient(circle at 100% 0%,rgba(90,169,230,.06),transparent 35%);
+  min-height:100vh;padding:env(safe-area-inset-top) 0 40px;}
+.wrap{max-width:860px;margin:0 auto;padding:20px 16px}
+h1{font-size:1.9rem;font-weight:800;letter-spacing:.04em}
+h1 .en{display:block;font-size:.72rem;font-weight:500;color:var(--gold);letter-spacing:.4em;margin-bottom:6px}
+h2{font-size:1.15rem;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+h2::before{content:'';width:4px;height:18px;background:var(--gold);border-radius:2px;display:inline-block}
+.sub{color:var(--muted);font-size:.9rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:16px}
+.btn{font-family:inherit;font-size:1rem;font-weight:700;border:none;border-radius:10px;padding:14px 22px;cursor:pointer;
+  background:linear-gradient(135deg,var(--gold),var(--gold2));color:#1a140a;transition:transform .12s,box-shadow .2s;width:100%}
+.btn:hover{transform:translateY(-1px);box-shadow:0 6px 22px rgba(212,168,87,.3)}
+.btn:active{transform:translateY(0)}
+.btn.sec{background:var(--panel2);color:var(--ink);border:1px solid var(--line)}
+.btn.sec:hover{box-shadow:none;border-color:var(--gold)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+
+/* setup form */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:560px){.grid{grid-template-columns:1fr}}
+label{display:block;font-size:.82rem;color:var(--muted);margin-bottom:6px}
+label .hint{color:#5f6b78;font-size:.74rem}
+input[type=text],input[type=number]{width:100%;font-family:inherit;font-size:1rem;color:var(--ink);
+  background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:11px 12px;outline:none}
+input:focus{border-color:var(--gold)}
+.field{margin-bottom:4px}
+
+/* hud */
+.hud{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:8px}
+@media(max-width:560px){.hud{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:11px 12px}
+.stat .k{font-size:.72rem;color:var(--muted)}
+.stat .v{font-size:1.22rem;font-weight:800;letter-spacing:.02em;margin-top:2px}
+.stat .v small{font-size:.7rem;font-weight:500;color:var(--muted)}
+.pos{color:var(--green)} .neg{color:var(--red)}
+.bars{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.bar{flex:1;min-width:130px}
+.bar .k{font-size:.74rem;color:var(--muted);display:flex;justify-content:space-between}
+.bar .track{height:7px;background:#10161e;border-radius:4px;overflow:hidden;margin-top:4px;border:1px solid var(--line)}
+.bar .fill{height:100%;border-radius:4px;transition:width .5s}
+
+/* events */
+.event{background:linear-gradient(135deg,rgba(224,101,95,.1),rgba(34,44,56,.4));
+  border:1px solid var(--line);border-left:4px solid var(--gold);border-radius:10px;padding:14px 16px;margin-bottom:10px}
+.event.good{border-left-color:var(--green)}
+.event.bad{border-left-color:var(--red)}
+.event .t{font-weight:700;font-size:.98rem}
+.event .d{font-size:.85rem;color:var(--muted);margin-top:3px}
+.event .tag{font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--panel2);color:var(--gold);margin-left:6px;white-space:nowrap}
+
+/* price slider */
+.slider-row{margin:12px 0}
+.slider-row .lab{display:flex;justify-content:space-between;font-size:.9rem;margin-bottom:6px}
+input[type=range]{width:100%;accent-color:var(--gold);height:24px}
+
+/* action cards */
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:560px){.acts{grid-template-columns:1fr}}
+.act{position:relative;background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:12px 13px;cursor:pointer;transition:border-color .15s,background .15s}
+.act:hover{border-color:var(--gold)}
+.act.on{border-color:var(--gold);background:rgba(212,168,87,.12);box-shadow:inset 0 0 0 1px var(--gold)}
+.act.dis{opacity:.45;cursor:not-allowed}
+.act .nm{font-weight:700;font-size:.95rem;display:flex;justify-content:space-between;gap:6px;align-items:baseline}
+.act .cost{font-size:.78rem;color:var(--gold2);font-weight:700;white-space:nowrap}
+.act .ds{font-size:.78rem;color:var(--muted);margin-top:4px}
+.act .chk{position:absolute;top:8px;right:10px;font-size:.9rem;color:var(--gold);opacity:0;transition:opacity .15s}
+.act.on .chk{opacity:1}
+
+.foot{position:sticky;bottom:0;background:linear-gradient(to top,var(--bg) 60%,transparent);padding-top:14px;margin-top:6px}
+.budget{display:flex;justify-content:space-between;align-items:center;background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:.92rem}
+.budget b{font-size:1.15rem}
+.log{font-size:.84rem;color:var(--muted)}
+.log .ln{padding:5px 0;border-bottom:1px solid var(--line)}
+.log .ln:last-child{border:none}
+.center{text-align:center}
+.rank{font-size:5rem;font-weight:900;line-height:1;margin:6px 0}
+.toggle-extra{font-size:.84rem;color:var(--gold);cursor:pointer;text-align:center;padding:8px;user-select:none}
+.divider{height:1px;background:var(--line);margin:14px 0}
+.pill{display:inline-block;font-size:.74rem;background:var(--panel2);border:1px solid var(--line);border-radius:20px;padding:3px 10px;margin:2px 4px 2px 0;color:var(--muted)}
+.fade{animation:fade .4s ease}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ============ SETUP ============ -->
+<div id="setup">
+  <header style="margin-bottom:22px">
+    <h1><span class="en">SME TURNAROUND SIMULATOR</span>再建 ― 中小企業再建シミュレーション</h1>
+    <p class="sub" style="margin-top:10px">
+      物価高・人手不足・円安・金利上昇・DX——<b>2026年の社会情勢</b>のなか、傾いた会社を立て直せ。<br>
+      あなたは新しく就任した経営者。<b>6年間</b>、資金ショート（倒産）を回避しながら会社を再建する。
+    </p>
+  </header>
+
+  <div class="card">
+    <h2>会社の現状を入力</h2>
+    <p class="sub" style="margin:-6px 0 16px">金額の単位はすべて<b>万円</b>。初期値は典型的な地方の中小製造業を想定。そのまま始めてもOK。</p>
+    <div class="field" style="margin-bottom:14px">
+      <label>会社名</label>
+      <input type="text" id="i_name" value="まつなが工房" maxlength="20">
+    </div>
+    <div class="grid">
+      <div class="field"><label>年間売上 <span class="hint">(万円)</span></label><input type="number" id="i_sales" value="12000"></div>
+      <div class="field"><label>年間生産数 <span class="hint">(個)</span></label><input type="number" id="i_prod" value="24000"></div>
+      <div class="field"><label>固定費/年 <span class="hint">(家賃・水光熱・減価償却など)</span></label><input type="number" id="i_fixed" value="3000"></div>
+      <div class="field"><label>人件費/年 <span class="hint">(総額)</span></label><input type="number" id="i_labor" value="4200"></div>
+      <div class="field"><label>従業員数 <span class="hint">(人)</span></label><input type="number" id="i_emp" value="12"></div>
+      <div class="field"><label>借入金 <span class="hint">(残高)</span></label><input type="number" id="i_debt" value="5000"></div>
+      <div class="field"><label>手元資金（現金） <span class="hint">(万円)</span></label><input type="number" id="i_cash" value="1500"></div>
+      <div class="field"><label>難易度</label>
+        <select id="i_diff" style="width:100%;font-family:inherit;font-size:1rem;color:var(--ink);background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:11px 12px">
+          <option value="easy">やさしい（景気に追い風）</option>
+          <option value="normal" selected>ふつう（2026年の標準）</option>
+          <option value="hard">きびしい（逆風つづき）</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:18px"><button class="btn" onclick="Game.start()">▶ 経営を引き継ぐ</button></div>
+  </div>
+
+  <div class="card">
+    <h2>遊び方</h2>
+    <p class="sub">毎年、最初に<b>📰時事イベント</b>が起き、市場（需要・原材料費・金利など）が変わる。あなたは<b>🎯単価の設定</b>と<b>投資カードの選択</b>で対応する。年末に<b>📊決算</b>が出て現金が増減。
+    <b>現金がマイナスになると倒産</b>。6年生き残り、最終の現金・純資産・ブランド力で<b>S〜Dランク</b>が決まる。</p>
+    <div style="margin-top:10px">
+      <span class="pill">需要 = 価格弾力性 × ブランド × 品質 × 景気</span>
+      <span class="pill">生産能力 = 設備 × 人員 × 士気</span>
+      <span class="pill">士気が下がると離職</span>
+      <span class="pill">借入は利息を生む</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============ GAME ============ -->
+<div id="game" class="hidden"></div>
+
+<!-- ============ RESULT ============ -->
+<div id="result" class="hidden"></div>
+
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const yen = n => Math.round(n).toLocaleString('ja-JP');
+const clamp = (n,a,b) => Math.max(a,Math.min(b,n));
+const rnd = (a,b) => a + Math.random()*(b-a);
+const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+
+const TOTAL_YEARS = 6;
+
+// ───────── 時事イベント・デッキ（2026年の社会情勢を反映） ─────────
+// m: その年に適用される市場の変調。kind: good/bad/neutral
+const EVENTS = [
+  {id:'rawup', kind:'bad', t:'原材料・資材価格の高騰', tag:'コスト',
+   d:'木材・金属・樹脂が値上がり。仕入れ（変動費）が膨らむ。', m:{varCost:1.12}},
+  {id:'yenweak', kind:'bad', t:'円安が進行', tag:'為替',
+   d:'輸入コストが上昇。一方で輸出・インバウンド需要にはプラス。', m:{varCost:1.08, demand:1.05}},
+  {id:'rate', kind:'bad', t:'日銀が追加利上げ', tag:'金利',
+   d:'政策金利が上昇。借入金の支払利息が重くなる。', m:{rate:0.015}},
+  {id:'wagepress', kind:'bad', t:'最低賃金引き上げ・賃上げ機運', tag:'人件費',
+   d:'人件費が自動的に上昇。賃上げしないと士気が下がる。', m:{labor:1.06, moraleIfNoRaise:-8}},
+  {id:'shortage', kind:'bad', t:'人手不足が深刻化', tag:'労働',
+   d:'採用難で生産能力が低下。採用コストも上昇。', m:{capacity:0.92}},
+  {id:'energy', kind:'bad', t:'エネルギー価格が高騰', tag:'コスト',
+   d:'電気・燃料代が上昇し固定費を圧迫。省エネ投資があれば軽減。', m:{fixedEnergy:1.10}},
+  {id:'reform', kind:'good', t:'省力化・事業再構築の補助金公募', tag:'政策',
+   d:'国の補助金が公募中。「補助金申請」が通りやすい年。', m:{subsidyBonus:0.25}},
+  {id:'aiboom', kind:'good', t:'生成AI・DXブーム', tag:'技術',
+   d:'DX/AI投資の生産性効果がこの年は高まる。', m:{dxBonus:1.5}},
+  {id:'inbound', kind:'good', t:'インバウンド需要が回復', tag:'市場',
+   d:'国内外からの引き合いが増え、需要が拡大。', m:{demand:1.12}},
+  {id:'recession', kind:'bad', t:'物価高で消費が冷え込む', tag:'市場',
+   d:'家計の節約志向で需要が縮小。値上げが効きにくい。', m:{demand:0.88}},
+  {id:'bigcut', kind:'bad', t:'大口取引先から値下げ要請', tag:'取引',
+   d:'主要顧客が単価引き下げを要求。応じないと需要減のリスク。', m:{demand:0.93, priceCeil:true}},
+  {id:'disaster', kind:'bad', t:'自然災害でサプライチェーン寸断', tag:'災害',
+   d:'資材調達が滞り生産能力が低下、仕入れも割高に。', m:{capacity:0.88, varCost:1.06}},
+  {id:'craft', kind:'good', t:'「メイドイン・ジャパン」が再評価', tag:'市場',
+   d:'品質の高い国産品への関心が高まる。品質が高いほど需要増。', m:{qualityDemand:true}},
+  {id:'stable', kind:'neutral', t:'おおむね平穏な一年', tag:'—',
+   d:'大きな波乱はなし。足場を固めるチャンス。', m:{}},
+];
+
+// ───────── 投資カード ─────────
+// cost: 即時の現金支出（万円）。apply(s): 状態へ恒久的/単年効果を適用
+const ACTIONS = [
+  {id:'equip_s', nm:'設備投資（小）', cost:500, ds:'生産能力+15% / 品質+4 / 仕入れ単価-2%',
+   apply:s=>{s.equipCap*=1.15; s.quality=clamp(s.quality+4,0,100); s.unitVar*=0.98;}},
+  {id:'equip_l', nm:'設備投資（大）', cost:1300, ds:'生産能力+35% / 品質+9 / 仕入れ単価-5%',
+   apply:s=>{s.equipCap*=1.35; s.quality=clamp(s.quality+9,0,100); s.unitVar*=0.95;}},
+  {id:'dx', nm:'DX・AI導入', cost:850, ds:'固定費-12% / 一人当たり生産性+22% / 技術力+20',
+   apply:(s,m)=>{const b=m.dxBonus||1; s.fixedCost*=(1-0.12*b>0?(1-0.12*Math.min(b,2)):0.88); s.perEmp*=1+0.22*Math.min(b,2); s.tech=clamp(s.tech+20,0,100);}},
+  {id:'eco', nm:'省エネ・脱炭素投資', cost:600, ds:'固定費-6% / エネルギー高騰に強くなる / ブランド+5',
+   apply:s=>{s.fixedCost*=0.94; s.ecoShield=true; s.brand=clamp(s.brand+5,0,100);}},
+  {id:'hire', nm:'採用（+2名）', cost:200, ds:'従業員+2 / 人件費増 / 生産能力アップ',
+   apply:s=>{const w=s.laborCost/s.employees; s.employees+=2; s.laborCost+=w*2;}},
+  {id:'raise', nm:'賃上げ（+5%）', cost:0, ds:'人件費+5% / 士気+16 / 離職を抑制',
+   apply:s=>{s.laborCost*=1.05; s.morale=clamp(s.morale+16,0,100); s.raisedThisYear=true;}},
+  {id:'ad', nm:'広告・ブランディング', cost:400, ds:'ブランド+12 / この年の需要+8%',
+   apply:s=>{s.brand=clamp(s.brand+12,0,100); s.adDemand=1.08;}},
+  {id:'newprod', nm:'新商品開発', cost:700, ds:'成功すれば翌年から需要+18%（品質依存で成否）',
+   apply:s=>{const p=0.45+s.quality/250+s.tech/400; if(Math.random()<p){s.baseDemand*=1.18; s.brand=clamp(s.brand+6,0,100); s._newprod='success';}else{s._newprod='fail';}}},
+  {id:'channel', nm:'販路拡大（EC・海外）', cost:500, ds:'需要+10% / ただし円安・景気の影響を受けやすく',
+   apply:s=>{s.baseDemand*=1.10; s.exposed=true;}},
+  {id:'subsidy', nm:'補助金を申請', cost:120, ds:'審査に通れば最大1,200万円を獲得（技術力・公募状況で確率変動）',
+   apply:(s,m)=>{const base=0.30+s.tech/300+(m.subsidyBonus||0); if(Math.random()<base){const amt=Math.round(rnd(600,1200)); s.cash+=amt; s._subsidy=amt;}else{s._subsidy=0;}}},
+  {id:'layoff', nm:'リストラ（−2名）', cost:300, ds:'退職金300万 / 人件費減 / 士気-22 / 生産能力減',
+   apply:s=>{if(s.employees>2){const w=s.laborCost/s.employees; s.employees-=2; s.laborCost-=w*2; s.morale=clamp(s.morale-22,0,100);}}},
+  {id:'repay', nm:'借入を繰上返済（1,000万）', cost:1000, ds:'借入金を1,000万円減らし、将来の利息を軽くする',
+   apply:s=>{const r=Math.min(1000,s.debt); s.debt-=r; s._repaid=r;}},
+];
+
+const Game = {
+  s:null,
+
+  start(){
+    const v = id => parseFloat($(id).value)||0;
+    const sales=v('i_sales'), prod=Math.max(1,v('i_prod')), emp=Math.max(1,v('i_emp'));
+    const diff = $('i_diff').value;
+    const price = sales/prod; // 万円/個
+    const s = {
+      name: $('i_name').value || '無名の会社',
+      diff, year:1, alive:true,
+      cash: v('i_cash'),
+      debt: v('i_debt'),
+      fixedCost: v('i_fixed'),
+      laborCost: v('i_labor'),
+      employees: emp,
+      price, basePrice: price,
+      unitVar: price*0.42,            // 変動費単価（仕入れ・原材料）
+      equipCap: prod*1.10,            // 設備の生産能力
+      perEmp: prod/emp,              // 一人当たり生産数
+      baseDemand: prod,              // 基礎需要
+      brand:50, morale:60, quality:58, tech:35,
+      ecoShield:false, exposed:false,
+      cumProfit:0, fixedAssets:0,
+      history:[],
+    };
+    s.startEquity = s.cash - s.debt;
+    this.s = s;
+    $('setup').classList.add('hidden');
+    $('game').classList.remove('hidden');
+    this.beginYear();
+  },
+
+  // 年の始まり：イベントを引く
+  beginYear(){
+    const s=this.s;
+    s.priceInput = s.price;        // スライダー用：現在単価を初期値に
+    s.selected = new Set();
+    s.borrow = 0;
+
+    // 難易度でイベントの引き方を調整
+    const deck = EVENTS.slice();
+    let events=[];
+    const nEv = Math.random()<0.5?1:2;
+    for(let i=0;i<nEv;i++){
+      let pool=deck;
+      if(s.diff==='hard') pool = deck.filter(e=>e.kind!=='good').concat(deck.filter(e=>e.kind==='bad'));
+      if(s.diff==='easy') pool = deck.concat(deck.filter(e=>e.kind==='good'));
+      const e=pick(pool);
+      if(!events.find(x=>x.id===e.id)) events.push(e);
+    }
+    // 合成された市場変調
+    const m = {varCost:1, demand:1, rate:0, labor:1, capacity:1, fixedEnergy:1,
+               subsidyBonus:0, dxBonus:1, moraleIfNoRaise:0,
+               priceCeil:false, qualityDemand:false};
+    if(s.diff==='easy'){m.demand*=1.05;}
+    if(s.diff==='hard'){m.demand*=0.95; m.varCost*=1.03;}
+    events.forEach(e=>{
+      const x=e.m;
+      if(x.varCost)m.varCost*=x.varCost;
+      if(x.demand)m.demand*=x.demand;
+      if(x.rate)m.rate+=x.rate;
+      if(x.labor)m.labor*=x.labor;
+      if(x.capacity)m.capacity*=x.capacity;
+      if(x.fixedEnergy)m.fixedEnergy*=x.fixedEnergy;
+      if(x.subsidyBonus)m.subsidyBonus+=x.subsidyBonus;
+      if(x.dxBonus)m.dxBonus*=x.dxBonus;
+      if(x.moraleIfNoRaise)m.moraleIfNoRaise+=x.moraleIfNoRaise;
+      if(x.priceCeil)m.priceCeil=true;
+      if(x.qualityDemand)m.qualityDemand=true;
+    });
+    s.events=events; s.market=m;
+    this.renderGame();
+  },
+
+  toggle(id){
+    const s=this.s, a=ACTIONS.find(x=>x.id===id);
+    if(s.selected.has(id)) s.selected.delete(id);
+    else {
+      if(this.spentSoFar()+a.cost > this.available()) return; // 買えない
+      s.selected.add(id);
+    }
+    this.renderActions();
+  },
+  available(){ return this.s.cash + this.s.borrow; },
+  spentSoFar(){ let t=0; this.s.selected.forEach(id=>t+=ACTIONS.find(a=>a.id===id).cost); return t; },
+  remaining(){ return this.available()-this.spentSoFar(); },
+
+  setBorrow(val){ const s=this.s; s.borrow=Math.max(0,val);
+    // 借入を減らして買えなくなったら選択解除
+    while(this.spentSoFar()>this.available() && s.selected.size){
+      const last=[...s.selected].pop(); s.selected.delete(last);
+    }
+    this.renderBudget(); this.renderActions(); this.renderBorrow();
+  },
+  setPrice(val){ this.s.priceInput=val; $('priceVal').textContent='単価 '+val.toFixed(2)+'万円  ('+((val/this.s.price-1)*100).toFixed(0)+'%)'; },
+
+  // ───────── 決算（1年シミュレーション） ─────────
+  advance(){
+    const s=this.s, m=s.market;
+    // 1) 借入実行
+    if(s.borrow>0){ s.cash+=s.borrow; s.debt+=s.borrow; }
+    // 2) 投資カードを現金から支払い & 効果適用
+    s._subsidy=null; s._newprod=null; s._repaid=null; s.adDemand=1; s.raisedThisYear=false;
+    s.selected.forEach(id=>{ const a=ACTIONS.find(x=>x.id===id); s.cash-=a.cost; s.fixedAssets+=(['equip_s','equip_l','dx','eco'].includes(id))?a.cost:0; });
+    s.selected.forEach(id=>{ ACTIONS.find(x=>x.id===id).apply(s,m); });
+    // 3) 単価を採用
+    s.price = s.priceInput;
+    if(m.priceCeil && s.price>s.basePrice) s.price=s.basePrice*0.99; // 値下げ要請で上限
+
+    // 4) 市場の単年変調を適用（恒久値には触れず計算用の値を作る）
+    const varCost = s.unitVar * m.varCost * (s.exposed?1.02:1);
+    const fixedCost = s.fixedCost * (m.fixedEnergy>1 && s.ecoShield ? 1+(m.fixedEnergy-1)*0.4 : m.fixedEnergy);
+    const laborCost = s.laborCost * m.labor;
+    const rate = clamp(0.035 + m.rate + (s.diff==='hard'?0.01:0),0.02,0.12);
+
+    // 5) 需要の計算
+    const elasticity = 1.25*(1 - s.brand/320); // ブランドが高いほど値上げに強い
+    const priceFactor = Math.pow(s.basePrice/Math.max(0.01,s.price), elasticity);
+    const brandFactor = 0.70 + s.brand/100*0.6;
+    const qualFactor = 0.80 + s.quality/100*0.45;
+    let demandMult = m.demand * (s.adDemand||1) * (s.exposed? (m.demand-1)*0.6+1 : 1);
+    if(m.qualityDemand) demandMult *= 0.9 + s.quality/100*0.5;
+    let demand = s.baseDemand * priceFactor * brandFactor * qualFactor * demandMult;
+    demand = Math.max(0, demand);
+
+    // 6) 生産能力
+    const laborCap = s.employees * s.perEmp * (0.65 + s.morale/100*0.55);
+    const capacity = Math.min(s.equipCap, laborCap) * m.capacity;
+    const produced = Math.max(0, Math.min(capacity, demand));
+    const sold = produced;
+    const lostSales = Math.max(0, demand - capacity); // 機会損失
+
+    // 7) 損益計算（単位：万円）
+    const revenue = sold * s.price;
+    const cogs = produced * varCost;
+    const gross = revenue - cogs;
+    const opProfit = gross - fixedCost - laborCost;
+    const interest = s.debt * rate;
+    const subsidy = s._subsidy||0;
+    let ordinary = opProfit - interest; // 補助金は現金で既に加算済み
+    const tax = ordinary>0 ? ordinary*0.30 : 0;
+    const net = ordinary - tax;
+    s.cash += net;
+    s.cumProfit += net;
+
+    // 8) 士気・離職・ブランドの推移
+    if(!s.raisedThisYear && m.moraleIfNoRaise) s.morale=clamp(s.morale+m.moraleIfNoRaise,0,100);
+    if(net<0) s.morale=clamp(s.morale-6,0,100);
+    s.morale=clamp(s.morale-3,0,100); // 自然減衰
+    s.brand=clamp(s.brand-2 + (s.quality>70?2:0),0,100);
+    let quit=0;
+    if(s.morale<38 && s.employees>2){ if(Math.random()<0.6){const w=s.laborCost/s.employees; s.employees-=1; s.laborCost-=w; quit=1;} }
+
+    // 9) ログ生成
+    const log=[];
+    log.push(`売上 ${yen(revenue)}万円（販売 ${yen(sold)}個 × 単価 ${s.price.toFixed(2)}万）`);
+    log.push(`売上原価 −${yen(cogs)}万　粗利 ${yen(gross)}万`);
+    log.push(`固定費 −${yen(fixedCost)}万　人件費 −${yen(laborCost)}万 → 営業利益 ${yen(opProfit)}万`);
+    log.push(`支払利息 −${yen(interest)}万（金利${(rate*100).toFixed(1)}%）`);
+    if(subsidy) log.push(`✅ 補助金 +${yen(subsidy)}万円を獲得！`);
+    if(s._subsidy===0) log.push(`❌ 補助金の申請は不採択（申請費は戻らず）`);
+    if(s._newprod==='success') log.push(`✅ 新商品が当たり、来期から需要+18%`);
+    if(s._newprod==='fail') log.push(`❌ 新商品は不発に終わった`);
+    if(s._repaid) log.push(`借入を ${yen(s._repaid)}万円 繰上返済`);
+    log.push(`税金 −${yen(tax)}万 → <b>当期純利益 ${net>=0?'+':''}${yen(net)}万円</b>`);
+    if(lostSales>50) log.push(`⚠️ 生産能力不足で ${yen(lostSales)}個の機会損失`);
+    if(quit) log.push(`⚠️ 士気の低下で従業員が1名離職`);
+
+    s.history.push({year:s.year, net, cash:s.cash, revenue, demand, sold, capacity});
+    s.lastLog={log, net, revenue, sold, demand, capacity, lostSales};
+
+    // 10) 倒産判定
+    if(s.cash < 0){ s.alive=false; this.end(); return; }
+    this.showResult();
+  },
+
+  // ───────── 描画 ─────────
+  renderGame(){
+    const s=this.s;
+    $('game').innerHTML = `
+      <header style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:8px">
+        <div><div class="sub">${s.name}</div><h1 style="font-size:1.4rem">${s.year}年目 / 全${TOTAL_YEARS}年</h1></div>
+        <div class="sub">難易度：${({easy:'やさしい',normal:'ふつう',hard:'きびしい'})[s.diff]}</div>
+      </header>
+      <div id="hud"></div>
+      <div class="card fade">
+        <h2>📰 今年の出来事</h2>
+        <div id="events"></div>
+      </div>
+      <div class="card fade">
+        <h2>🎯 経営判断</h2>
+        <div class="slider-row">
+          <div class="lab"><span>製品の単価設定</span><span id="priceVal"></span></div>
+          <input type="range" id="priceSlider" min="${(s.price*0.7).toFixed(2)}" max="${(s.price*1.35).toFixed(2)}" step="0.01" value="${s.priceInput.toFixed(2)}"
+            oninput="Game.setPrice(parseFloat(this.value))">
+          <div class="sub" style="font-size:.76rem">値上げ→1個あたり利益増だが需要減。ブランド・品質が高いほど値上げに強い。</div>
+        </div>
+        <div class="slider-row">
+          <div class="lab"><span>追加で借り入れる</span><span id="borrowVal"></span></div>
+          <input type="range" id="borrowSlider" min="0" max="3000" step="100" value="0"
+            oninput="Game.setBorrow(parseFloat(this.value))">
+        </div>
+        <div class="divider"></div>
+        <p class="sub" style="margin-bottom:10px">投資カードを選ぶ（手元資金＋借入の範囲で複数選択可）</p>
+        <div class="acts" id="acts"></div>
+      </div>
+      <div class="foot">
+        <div class="budget"><span>使える資金</span><b id="budgetNum"></b></div>
+        <button class="btn" onclick="Game.advance()">📊 この方針で決算する（年を進める）</button>
+      </div>
+    `;
+    this.renderHud(); this.renderEvents(); this.renderActions(); this.renderBudget(); this.renderBorrow();
+    this.setPrice(s.priceInput);
+  },
+
+  renderHud(){
+    const s=this.s;
+    const equity = s.cash - s.debt + s.fixedAssets;
+    const bar=(k,v,col)=>`<div class="bar"><div class="k"><span>${k}</span><span>${Math.round(v)}</span></div><div class="track"><div class="fill" style="width:${clamp(v,0,100)}%;background:${col}"></div></div></div>`;
+    $('hud').innerHTML = `
+      <div class="hud">
+        <div class="stat"><div class="k">現金</div><div class="v ${s.cash<300?'neg':''}">${yen(s.cash)}<small>万</small></div></div>
+        <div class="stat"><div class="k">借入金</div><div class="v">${yen(s.debt)}<small>万</small></div></div>
+        <div class="stat"><div class="k">純資産(概算)</div><div class="v ${equity<0?'neg':'pos'}">${yen(equity)}<small>万</small></div></div>
+        <div class="stat"><div class="k">従業員</div><div class="v">${s.employees}<small>人</small></div></div>
+      </div>
+      <div class="card" style="padding:14px 16px;margin-bottom:16px">
+        <div class="bars">
+          ${bar('ブランド力',s.brand,'linear-gradient(90deg,#d4a857,#f0c674)')}
+          ${bar('従業員の士気',s.morale,'linear-gradient(90deg,#5cc98a,#9ae6b4)')}
+          ${bar('品質',s.quality,'linear-gradient(90deg,#5aa9e6,#90cdf4)')}
+          ${bar('技術力(DX)',s.tech,'linear-gradient(90deg,#a98bd6,#c6a8ec)')}
+        </div>
+      </div>`;
+  },
+  renderEvents(){
+    const s=this.s;
+    $('events').innerHTML = s.events.map(e=>`
+      <div class="event ${e.kind}">
+        <div class="t">${e.t}<span class="tag">${e.tag}</span></div>
+        <div class="d">${e.d}</div>
+      </div>`).join('');
+  },
+  renderActions(){
+    const s=this.s, rem=this.remaining();
+    $('acts').innerHTML = ACTIONS.map(a=>{
+      const on=s.selected.has(a.id);
+      const dis=!on && a.cost>rem;
+      return `<div class="act ${on?'on':''} ${dis?'dis':''}" onclick="${dis?'':`Game.toggle('${a.id}')`}">
+        <span class="chk">✔</span>
+        <div class="nm"><span>${a.nm}</span><span class="cost">${a.cost?('−'+yen(a.cost)+'万'):'無料'}</span></div>
+        <div class="ds">${a.ds}</div>
+      </div>`;
+    }).join('');
+    this.renderBudget();
+  },
+  renderBudget(){
+    const rem=this.remaining();
+    if($('budgetNum')) $('budgetNum').innerHTML = `<span class="${rem<0?'neg':''}">${yen(rem)}万円</span> <span class="sub" style="font-size:.8rem">／ ${yen(this.available())}万円</span>`;
+  },
+  renderBorrow(){
+    if($('borrowVal')) $('borrowVal').textContent = '+'+yen(this.s.borrow)+'万円';
+    if($('borrowSlider')) $('borrowSlider').value=this.s.borrow;
+  },
+
+  showResult(){
+    const s=this.s, r=s.lastLog;
+    $('game').innerHTML = `
+      <header style="margin-bottom:14px"><div class="sub">${s.name}</div><h1 style="font-size:1.4rem">${s.year}年目の決算</h1></header>
+      <div class="card fade ${r.net>=0?'':''}">
+        <h2>${r.net>=0?'🟢':'🔴'} 当期純利益 <span class="${r.net>=0?'pos':'neg'}" style="margin-left:auto;font-size:1.4rem">${r.net>=0?'+':''}${yen(r.net)}万円</span></h2>
+        <div class="log">${r.log.map(l=>`<div class="ln">${l}</div>`).join('')}</div>
+      </div>
+      <div id="hud"></div>
+      <div class="foot"><button class="btn" onclick="Game.next()">${s.year>=TOTAL_YEARS?'🏁 最終結果を見る':'▶ '+(s.year+1)+'年目へ'}</button></div>
+    `;
+    this.renderHud();
+  },
+  next(){
+    const s=this.s;
+    if(s.year>=TOTAL_YEARS){ this.end(); return; }
+    s.year++;
+    $('game').scrollIntoView({behavior:'smooth',block:'start'});
+    this.beginYear();
+  },
+
+  end(){
+    const s=this.s;
+    $('game').classList.add('hidden');
+    $('result').classList.remove('hidden');
+    const equity = s.cash - s.debt + s.fixedAssets;
+    let rank, msg, col;
+    if(!s.alive){
+      rank='倒産'; col='var(--red)';
+      msg='資金がショートし、会社は再建に至らなかった。だが、決断の連続だった日々に意味がなかったわけではない。';
+    } else {
+      // スコア：純資産の伸び・現金・ブランド・累計利益
+      const growth = equity - s.startEquity;
+      let score = equity*0.04 + s.cash*0.03 + s.brand*8 + s.morale*4 + s.cumProfit*0.05 + growth*0.05;
+      if(score>900){rank='S';col='var(--gold2)';msg='見事な再建。会社は危機を機会に変え、力強い成長軌道に乗った。名経営者として語り継がれるだろう。';}
+      else if(score>600){rank='A';col='var(--green)';msg='優れた再建。財務は健全化し、組織にも活気が戻った。';}
+      else if(score>350){rank='B';col='var(--blue)';msg='会社を存続させ、再建の足がかりを作った。次の世代へ確かにバトンを渡せる。';}
+      else if(score>120){rank='C';col='var(--purple)';msg='なんとか倒産は免れた。再建は道半ば。課題は山積みだが、灯は消えていない。';}
+      else {rank='D';col='var(--muted)';msg='生き残ったが、体力は削られた。綱渡りの経営が続く。';}
+    }
+    const rows = s.history.map(h=>`<div class="ln">${h.year}年目：純利益 <b class="${h.net>=0?'pos':'neg'}">${h.net>=0?'+':''}${yen(h.net)}万</b>　現金 ${yen(h.cash)}万</div>`).join('');
+    $('result').innerHTML = `
+      <header style="margin-bottom:18px"><h1><span class="en">RESULT</span>${s.name} ― ${TOTAL_YEARS}年間の経営</h1></header>
+      <div class="card center fade">
+        <div class="sub">総合評価</div>
+        <div class="rank" style="color:${col}">${rank}</div>
+        <p style="max-width:560px;margin:8px auto 4px">${msg}</p>
+      </div>
+      <div class="card fade">
+        <h2>最終状態</h2>
+        <div class="hud">
+          <div class="stat"><div class="k">現金</div><div class="v ${s.cash<0?'neg':'pos'}">${yen(s.cash)}<small>万</small></div></div>
+          <div class="stat"><div class="k">借入金</div><div class="v">${yen(s.debt)}<small>万</small></div></div>
+          <div class="stat"><div class="k">純資産(概算)</div><div class="v ${equity<0?'neg':'pos'}">${yen(equity)}<small>万</small></div></div>
+          <div class="stat"><div class="k">累計純利益</div><div class="v ${s.cumProfit<0?'neg':'pos'}">${s.cumProfit>=0?'+':''}${yen(s.cumProfit)}<small>万</small></div></div>
+        </div>
+        <div style="margin-top:8px">
+          <span class="pill">ブランド ${Math.round(s.brand)}</span>
+          <span class="pill">士気 ${Math.round(s.morale)}</span>
+          <span class="pill">品質 ${Math.round(s.quality)}</span>
+          <span class="pill">技術力 ${Math.round(s.tech)}</span>
+          <span class="pill">従業員 ${s.employees}人</span>
+        </div>
+      </div>
+      <div class="card fade"><h2>年次の推移</h2><div class="log">${rows}</div></div>
+      <div class="foot"><button class="btn" onclick="location.reload()">↻ もう一度プレイする</button></div>
+    `;
+    $('result').scrollIntoView({behavior:'smooth',block:'start'});
+  },
+};
+</script>
+</body>
+</html>

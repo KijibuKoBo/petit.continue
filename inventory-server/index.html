@@ -308,16 +308,9 @@ body.locked .app-header, body.locked main { display: none; }
     <div class="view-head">
       <div>
         <h1 class="view-title">生産予定</h1>
-        <p class="view-sub">予定 → 木地完成 → 塗装済 → 出荷済。状態を進めると在庫へ自動反映されます。</p>
+        <p class="view-sub">未着手（予定）の生産だけを一覧します。「木地完成」を押すと木地在庫へ移ります。</p>
       </div>
       <div class="toolbar">
-        <select id="prod-filter">
-          <option value="all">すべての状態</option>
-          <option value="planned">予定</option>
-          <option value="kiji">木地完成</option>
-          <option value="painted">塗装済</option>
-          <option value="shipped">出荷済</option>
-        </select>
         <button class="btn editor-only" data-action="new-lot">＋ 生産予定を追加</button>
       </div>
     </div>
@@ -680,7 +673,7 @@ function render() {
   else if (activeView === "users") renderUsers();
   else if (activeView === "audit") renderAudit();
 }
-const AUDIT_ACTION = { create: { l: "追加", c: "ok" }, update: { l: "編集", c: "info" }, delete: { l: "削除", c: "bad" }, status: { l: "状態変更", c: "warn" }, loss: { l: "破損/ロス", c: "bad" }, reset: { l: "リセット", c: "bad" }, clear: { l: "全消去", c: "bad" }, import: { l: "取込", c: "info" } };
+const AUDIT_ACTION = { create: { l: "追加", c: "ok" }, update: { l: "編集", c: "info" }, delete: { l: "削除", c: "bad" }, status: { l: "状態変更", c: "warn" }, loss: { l: "破損/ロス", c: "bad" }, reset: { l: "リセット", c: "bad" }, clear: { l: "全消去", c: "bad" }, import: { l: "取込", c: "info" }, export: { l: "書出", c: "info" } };
 const ENTITY_LABEL = { product: "製品", lot: "生産予定", loss: "破損", user: "ユーザー", system: "システム" };
 async function renderAudit() {
   const el = document.getElementById("audit-table");
@@ -995,23 +988,6 @@ async function saveLot(id) {
   } catch (e) { err.textContent = e.message; }
 }
 
-/* 木地完成後のカラー選択 */
-function promptColor(lotId) {
-  const l = state.lots.find((x) => x.id === lotId);
-  if (!l) return;
-  const p = productById(l.productId);
-  openModal(`
-    <div class="modal-head"><h3>カラーを選択</h3><p>${esc(p ? p.name : "")}${l.lotNo ? "（" + esc(l.lotNo) + "）" : ""} の塗装カラーを選択してください。</p></div>
-    <div class="modal-body">
-      <div class="field-group"><label class="field">カラー（任意・後で変更できます）</label><select id="pc-color">${colorOptions(l.color)}</select></div>
-    </div>
-    <div class="modal-foot"><button class="btn ghost" data-action="close">スキップ</button><button class="btn" id="pc-save">保存</button></div>`);
-  document.getElementById("pc-save").addEventListener("click", async () => {
-    const color = document.getElementById("pc-color").value;
-    try { const d = await api("set_color", { id: lotId, color }); state = d.state; closeModal(); render(); if (color) toast("カラー「" + color + "」を登録しました"); }
-    catch (e) { toast(e.message, true); }
-  });
-}
 
 /* 製品ごとのロット明細 */
 function openProductDetail(pid) {
@@ -1026,10 +1002,9 @@ function openProductDetail(pid) {
   const meta = `<div class="detail-meta">
     <span>カテゴリ <b>${esc(p.category || "未分類")}</b></span>
     <span>木地在庫 <b>${num(rawStock(pid))}</b></span>
-    <span>完成在庫 <b>${num(finishedStock(pid))}</b></span>
+    <span>在庫（完成） <b>${num(finishedStock(pid))}</b></span>
     <span>安全在庫 <b>${num(p.safetyStock)}</b></span>
     <span>予定 <b>${num(plannedQty(pid))}</b></span>
-    <span>予測在庫 <b>${num(projectedStock(pid))}</b></span>
     ${lossQty(pid) ? `<span>破損計 <b style="color:var(--bad)">${num(lossQty(pid))}</b></span>` : ""}
     <span>状態 <span class="badge ${st.key}">${st.label}</span></span>
   </div>`;
@@ -1394,7 +1369,6 @@ function switchView(view) {
   render();
 }
 document.getElementById("tabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-view]"); if (b) switchView(b.dataset.view); });
-document.getElementById("prod-filter").addEventListener("change", renderProduction);
 document.getElementById("inv-filter").addEventListener("change", renderInventory);
 
 /* ──────────────── アクション ──────────────── */
@@ -1486,46 +1460,6 @@ document.body.addEventListener("click", (e) => {
         { yesLabel: "全消去", pin: true });
       break;
   }
-});
-
-/* 状態変更セレクト：1段ずつ進める。飛ばす／戻すは確認。出荷へは出荷先プロンプト。 */
-const STATUS_LEVEL = { planned: 0, kiji: 1, painted: 2, shipped: 3 };
-document.body.addEventListener("change", async (e) => {
-  const sel = e.target.closest('select[data-action="set-status"]');
-  if (!sel) return;
-  if (!isEditor()) { render(); return; }
-  const id = sel.dataset.id;
-  const l = state.lots.find((x) => x.id === id);
-  if (!l) return;
-  const newStatus = sel.value;
-  if (newStatus === l.status) return;
-  const oldLevel = STATUS_LEVEL[l.status];
-  const newLevel = STATUS_LEVEL[newStatus];
-  const fromLabel = STATUS[l.status].label;
-  const toLabel = STATUS[newStatus].label;
-
-  /* 出荷へ進める時：出荷先プロンプトに必ず遷移 */
-  if (newStatus === "shipped") {
-    promptShip(id);
-    /* セレクトの表示を元に戻す（プロンプトで保存して初めて反映） */
-    sel.value = l.status;
-    return;
-  }
-  /* 飛ばし or 後戻りは確認 */
-  if (newLevel - oldLevel !== 1) {
-    const isBack = newLevel < oldLevel;
-    const msg = isBack
-      ? `状態を「${fromLabel}」から「${toLabel}」へ戻します。\n${newLevel < 3 ? "出荷日は消去されます。" : ""}${newLevel < 2 ? "塗装済日も消去されます。" : ""}${newLevel < 1 ? "木地完成日も消去されます。" : ""}\nよろしいですか？`
-      : `状態を「${fromLabel}」から「${toLabel}」へ一気に進めます。\n途中の工程日は今日の日付で自動入力されます。\nよろしいですか？`;
-    if (!confirm(msg)) { sel.value = l.status; return; }
-  }
-  /* 塗装済への遷移かつ色未設定なら、変更後にカラープロンプト */
-  const askColor = newStatus === "painted" && !l.color;
-  try {
-    const d = await api("set_status", { id, status: newStatus });
-    state = d.state; render(); toast("状態を「" + toLabel + "」に変更しました");
-    if (askColor) promptColor(id);
-  } catch (err) { toast(err.message, true); try { await refresh(); } catch (e2) {} }
 });
 
 /* 出荷情報プロンプト（status='shipped'専用） */

@@ -222,20 +222,7 @@ try {
       json_out(['state' => get_state($u)]);
     }
 
-    case 'set_color': {
-      $u = require_editor();
-      $b = body();
-      $id = $b['id'] ?? '';
-      $color = trim($b['color'] ?? '');
-      $lot = lot_by_id($id);
-      if (!$lot) fail('対象のロットが見つかりません。');
-      $pdo->prepare('UPDATE lots SET color=?, updated_at=? WHERE id=?')->execute([$color, now(), $id]);
-      $p = product_by_id($lot['product_id']);
-      audit($u, 'update', 'lot', $id, 'カラー設定: ' . ($p['name'] ?? '') . " / {$lot['lot_no']} → " . ($color ?: '（無）'));
-      json_out(['state' => get_state($u)]);
-    }
-
-    case 'delete_lot': {
+case 'delete_lot': {
       $u = require_editor();
       $id = body()['id'] ?? '';
       $lot = lot_by_id($id);

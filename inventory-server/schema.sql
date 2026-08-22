@@ -72,3 +72,27 @@ CREATE TABLE IF NOT EXISTS losses (
   created_at DATETIME,
   INDEX idx_losses_product (product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ログイン試行の記録（5回失敗で15分ロック）
+CREATE TABLE IF NOT EXISTS login_attempts (
+  ip VARCHAR(45) PRIMARY KEY,
+  fails INT NOT NULL DEFAULT 0,
+  locked_until DATETIME,
+  updated_at DATETIME
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 塗装指示の履歴（印刷・再印刷用）
+CREATE TABLE IF NOT EXISTS paint_instructions (
+  id VARCHAR(36) PRIMARY KEY,
+  product_id VARCHAR(36) NOT NULL,
+  kiji_lot_no VARCHAR(64) DEFAULT '',
+  kiji_date VARCHAR(10) DEFAULT '',
+  paint_date VARCHAR(10) DEFAULT '',
+  ship_by VARCHAR(10) DEFAULT '',       -- 出荷予定日（任意）
+  items_json TEXT,                       -- [{color, qty}, ...]
+  total_qty INT NOT NULL DEFAULT 0,
+  created_by VARCHAR(255) DEFAULT '',
+  created_at DATETIME,
+  INDEX idx_paint_product (product_id),
+  INDEX idx_paint_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -128,4 +128,22 @@ function migrate(PDO $pdo): void {
   ] as $sql) {
     try { $pdo->exec($sql); } catch (PDOException $e) { /* already exists */ }
   }
+
+  /* 既存インストールへの列追加（初回だけ通る） */
+  add_column_if_missing($pdo, 'losses', 'stage', "VARCHAR(32) DEFAULT ''");
+}
+
+/* テーブルに列が無ければ追加する。すでにあれば何もしない。 */
+function add_column_if_missing(PDO $pdo, string $table, string $column, string $definition): void {
+  $mysql = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql';
+  $have = [];
+  try {
+    if ($mysql) {
+      foreach ($pdo->query("SHOW COLUMNS FROM `$table`")->fetchAll() as $r) $have[] = $r['Field'];
+    } else {
+      foreach ($pdo->query("PRAGMA table_info($table)")->fetchAll() as $r) $have[] = $r['name'];
+    }
+  } catch (PDOException $e) { return; }
+  if (in_array($column, $have, true)) return;
+  try { $pdo->exec("ALTER TABLE `$table` ADD COLUMN `$column` $definition"); } catch (PDOException $e) { /* 競合時は無視 */ }
 }

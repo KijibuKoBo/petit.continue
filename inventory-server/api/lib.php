@@ -71,7 +71,7 @@ function map_loss(array $r): array {
   return [
     'id' => $r['id'], 'productId' => $r['product_id'], 'bucket' => $r['bucket'],
     'qty' => (int)$r['qty'], 'color' => $r['color'] ?? '', 'lossDate' => $r['loss_date'] ?? '',
-    'reason' => $r['reason'] ?? '', 'createdBy' => $r['created_by'] ?? '',
+    'stage' => $r['stage'] ?? '', 'reason' => $r['reason'] ?? '', 'createdBy' => $r['created_by'] ?? '',
   ];
 }
 
@@ -117,11 +117,11 @@ function import_backup(PDO $pdo, array $d, array $validStatus, bool $replaceUser
     $status = in_array($l['status'] ?? '', $validStatus, true) ? $l['status'] : 'planned';
     $il->execute([!empty($l['id']) ? (string)$l['id'] : uuid(), $l['productId'], $l['lotNo'] ?? '', max(0, (int)($l['qty'] ?? 0)), $l['dueDate'] ?? '', $status, $l['color'] ?? '', $l['dest'] ?? '', $l['note'] ?? '', $l['kijiDate'] ?? '', $l['paintedDate'] ?? '', $l['shippedDate'] ?? '', now(), now()]);
   }
-  $iloss = $pdo->prepare('INSERT INTO losses (id, product_id, bucket, qty, color, loss_date, reason, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)');
+  $iloss = $pdo->prepare('INSERT INTO losses (id, product_id, bucket, qty, color, loss_date, stage, reason, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)');
   foreach (($d['losses'] ?? []) as $x) {
     if (empty($x['productId']) || !isset($validIds[$x['productId']])) continue;
     $bucket = in_array($x['bucket'] ?? '', ['kiji', 'painted'], true) ? $x['bucket'] : 'kiji';
-    $iloss->execute([!empty($x['id']) ? (string)$x['id'] : uuid(), $x['productId'], $bucket, max(0, (int)($x['qty'] ?? 0)), $x['color'] ?? '', $x['lossDate'] ?? '', $x['reason'] ?? '', $x['createdBy'] ?? '', now()]);
+    $iloss->execute([!empty($x['id']) ? (string)$x['id'] : uuid(), $x['productId'], $bucket, max(0, (int)($x['qty'] ?? 0)), $x['color'] ?? '', $x['lossDate'] ?? '', $x['stage'] ?? '', $x['reason'] ?? '', $x['createdBy'] ?? '', now()]);
   }
   $ipi = $pdo->prepare('INSERT INTO paint_instructions (id, product_id, kiji_lot_no, kiji_date, paint_date, ship_by, items_json, total_qty, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)');
   foreach (($d['paintInstructions'] ?? []) as $pi) {

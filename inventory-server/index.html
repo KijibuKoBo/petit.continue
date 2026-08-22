@@ -145,6 +145,15 @@ td.center, th.center { text-align: center; }
 .muted { color: var(--muted); }
 .strong-num { font-weight: 700; font-size: 0.95rem; color: var(--charcoal); }
 .lotno { font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--gold-dark); }
+/* 分析：数値の横に比率バー */
+.statcell { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.statnum { font-variant-numeric: tabular-nums; font-weight: 600; }
+.statbar { display: block; width: 72px; height: 4px; background: var(--cream); border-radius: 2px; overflow: hidden; }
+.statbar i { display: block; height: 100%; background: var(--gold); border-radius: 2px; }
+.panel-head h3 { margin: 0; }
+/* 木地在庫の滞留 */
+.aging { font-size: 0.68rem; color: var(--muted); }
+.aging.warn { color: var(--warn); font-weight: 600; }
 .lot-link { background: none; border: none; padding: 0; font-variant-numeric: tabular-nums; font-size: 0.8rem; cursor: pointer; color: var(--gold-dark); border-bottom: 1px dotted var(--gold); text-align: left; transition: color 0.15s; }
 .lot-link:hover { color: var(--charcoal); }
 .lot-link.muted { color: var(--muted); border-bottom-color: var(--line); font-style: italic; }
@@ -198,7 +207,7 @@ td.center, th.center { text-align: center; }
 
 /* ── Forms ── */
 .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-select, input[type=text], input[type=number], input[type=date], input[type=email], input[type=password] {
+select, input[type=text], input[type=number], input[type=date], input[type=email], input[type=password], input[type=search] {
   font-family: var(--sans); font-size: 0.84rem; color: var(--ink);
   padding: 8px 11px; border: 1px solid var(--line); border-radius: 6px;
   background: var(--warm-white); transition: border 0.2s;
@@ -271,6 +280,7 @@ body.locked .app-header, body.locked main { display: none; }
       <button data-view="production">生産予定</button>
       <button data-view="shipments">出荷</button>
       <button data-view="inventory">在庫・製品</button>
+      <button data-view="analysis">分析</button>
       <button data-view="users" class="editor-only">ユーザー</button>
       <button data-view="audit" class="editor-only">変更履歴</button>
       <button data-view="data">データ管理</button>
@@ -336,12 +346,32 @@ body.locked .app-header, body.locked main { display: none; }
         <p class="view-sub">木地在庫＝木地完成の数量。在庫＝塗装済の数量（出荷可能）。製品名をクリックでロット別の明細を表示します。</p>
       </div>
       <div class="toolbar">
+        <input type="search" id="inv-search" placeholder="製品名で検索" autocomplete="off">
         <select id="inv-filter"><option value="all">すべてのカテゴリ</option></select>
-        <button class="btn ghost" data-action="export-csv">CSV出力</button>
+        <button class="btn ghost" data-action="export-csv" data-id="stock">CSV出力</button>
         <button class="btn editor-only" data-action="new-product">＋ 製品を追加</button>
       </div>
     </div>
     <div class="panel"><div class="panel-body table-wrap" id="inventory-table"></div></div>
+  </section>
+
+  <!-- ===== Analysis ===== -->
+  <section class="view" id="view-analysis">
+    <div class="view-head">
+      <div>
+        <h1 class="view-title">分析</h1>
+        <p class="view-sub">既に入力されているロット・出荷・破損の記録から自動集計します。追加の入力は要りません。</p>
+      </div>
+      <div class="toolbar">
+        <select id="an-period">
+          <option value="1">今月</option>
+          <option value="3" selected>直近3ヶ月</option>
+          <option value="12">直近1年</option>
+          <option value="all">全期間</option>
+        </select>
+      </div>
+    </div>
+    <div id="analysis-body"></div>
   </section>
 
   <!-- ===== Users ===== -->
@@ -382,8 +412,18 @@ body.locked .app-header, body.locked main { display: none; }
       <div class="toolbar">
         <button class="btn ghost editor-only" data-action="export-json">JSONを書き出し</button>
         <button class="btn ghost editor-only" data-action="import-json">JSONを読み込み</button>
-        <button class="btn ghost" data-action="export-csv">在庫CSVを書き出し</button>
         <input type="file" id="import-file" accept="application/json,.json" hidden>
+      </div>
+    </div>
+    <div class="panel panel-pad">
+      <h3 style="font-family:var(--serif);font-size:1.15rem;margin-bottom:10px;">CSVで書き出し</h3>
+      <p class="hint" style="margin-bottom:16px;">Excelでそのまま開けます（文字化けしません）。分析タブの各表も、表ごとにCSVボタンから書き出せます。</p>
+      <div class="toolbar">
+        <button class="btn ghost" data-action="export-csv" data-id="stock">在庫一覧</button>
+        <button class="btn ghost" data-action="export-csv" data-id="lots">ロット一覧</button>
+        <button class="btn ghost" data-action="export-csv" data-id="shipments">出荷一覧</button>
+        <button class="btn ghost" data-action="export-csv" data-id="losses">不良・破損一覧</button>
+        <button class="btn ghost" data-action="export-csv" data-id="paint">塗装指示一覧</button>
       </div>
     </div>
     <div class="panel panel-pad editor-only">
@@ -410,6 +450,10 @@ const API = "api/index.php";
 
 const CATEGORIES = ["Ca", "MP", "仏壇", "リリー", "PC", "特注"];
 const COLORS = ["アンティーク", "白", "黒", "ナチュラル", "他"];
+/* 破損の発生工程（不良を工程別に集計するため） */
+const LOSS_STAGES = ["木地", "加工・組立", "塗装", "検品", "梱包", "配送", "その他"];
+/* 木地在庫がこの日数を超えて動かないと「滞留」として警告 */
+const AGING_DAYS = 60;
 const STATUS = {
   planned: { label: "予定",     cls: "neutral" },
   kiji:    { label: "木地完成", cls: "info" },
@@ -559,6 +603,23 @@ const shippedQty = (pid) => sumLots(pid, "shipped");
 const lossQty = (pid) => sumLosses(pid, "kiji") + sumLosses(pid, "painted");
 const projectedStock = (pid) => rawStock(pid) + finishedStock(pid) + plannedQty(pid);
 
+/* 生産数＝木地完成以降になった総数（予定は含めない）。不良率の分母。 */
+const producedQty = (pid) => state.lots
+  .filter((l) => l.productId === pid && l.status !== "planned")
+  .reduce((s, l) => s + (Number(l.qty) || 0), 0);
+const defectRate = (pid) => {
+  const made = producedQty(pid);
+  return made > 0 ? (lossQty(pid) / made) * 100 : 0;
+};
+
+/* 木地在庫の滞留：いちばん古い木地ロットが何日動いていないか */
+function kijiAgingDays(pid) {
+  const dates = state.lots
+    .filter((l) => l.productId === pid && l.status === "kiji" && l.kijiDate)
+    .map((l) => l.kijiDate).sort();
+  return dates.length ? daysSince(dates[0]) : 0;
+}
+
 function finishedByColor(pid) {
   const m = {};
   state.lots.filter((l) => l.productId === pid && l.status === "painted").forEach((l) => {
@@ -670,6 +731,7 @@ function render() {
   else if (activeView === "production") renderProduction();
   else if (activeView === "shipments") renderShipments();
   else if (activeView === "inventory") renderInventory();
+  else if (activeView === "analysis") renderAnalysis();
   else if (activeView === "users") renderUsers();
   else if (activeView === "audit") renderAudit();
 }
@@ -703,7 +765,14 @@ const colorBreakHtml = (pid) => {
 const kijiLotsHtml = (pid) => {
   const kl = state.lots.filter((l) => l.productId === pid && l.status === "kiji");
   if (!kl.length) return "";
-  return `<div class="color-break muted">${kl.map((l) => `<span>${l.lotNo ? esc(l.lotNo) + " " : ""}×${l.qty}</span>`).join("　")}</div>`;
+  const age = kijiAgingDays(pid);
+  const ageHtml = age
+    ? `<div class="aging ${age >= AGING_DAYS ? "warn" : ""}">${age >= AGING_DAYS ? "滞留 " : ""}${age}日</div>`
+    : "";
+  /* ロットの数量は破損前の数。合計との差が出るので破損分を明示する。 */
+  const lost = sumLosses(pid, "kiji");
+  const lostHtml = lost ? `<span style="color:var(--bad)">破損 −${num(lost)}</span>` : "";
+  return `<div class="color-break muted">${kl.map((l) => `<span>${l.lotNo ? esc(l.lotNo) + " " : ""}×${l.qty}</span>`).join("　")}${lostHtml ? "　" + lostHtml : ""}</div>${ageHtml}`;
 };
 
 function renderDashboard() {
@@ -711,9 +780,13 @@ function renderDashboard() {
   const totalRaw = state.products.reduce((s, p) => s + Math.max(0, rawStock(p.id)), 0);
   const alerts = state.products.filter((p) => stockState(p.id).key !== "ok");
 
-  document.getElementById("dash-banner").innerHTML = alerts.length
+  const aged = state.products.filter((p) => rawStock(p.id) > 0 && kijiAgingDays(p.id) >= AGING_DAYS);
+  document.getElementById("dash-banner").innerHTML = (alerts.length
     ? `<div class="alert-banner">⚠ 在庫が不足している製品が <strong>&nbsp;${alerts.length}&nbsp;</strong> 件あります。</div>`
-    : `<div class="alert-banner none">✓ すべての製品が安全在庫を満たしています。</div>`;
+    : `<div class="alert-banner none">✓ すべての製品が安全在庫を満たしています。</div>`)
+    + (aged.length
+      ? `<div class="alert-banner" style="margin-top:10px;">⏳ 木地在庫が ${AGING_DAYS} 日以上動いていない製品が <strong>&nbsp;${aged.length}&nbsp;</strong> 件あります（${esc(aged.slice(0, 3).map((p) => p.name).join("、"))}${aged.length > 3 ? " ほか" : ""}）。</div>`
+      : "");
 
   document.getElementById("kpi-grid").innerHTML = `
     <div class="kpi"><div class="kpi-label">登録製品数</div><div class="kpi-value">${num(state.products.length)}<small>品目</small></div><div class="kpi-note">マスタ登録された製品</div></div>
@@ -823,8 +896,13 @@ function renderInventory() {
   const colspan = canEdit ? 7 : 6;
   const el = document.getElementById("inventory-table");
   if (!state.products.length) { el.innerHTML = emptyMsg("製品が登録されていません。"); return; }
+  const q = document.getElementById("inv-search").value.trim().toLowerCase();
+  const hits = q
+    ? state.products.filter((p) => (p.name + " " + (p.category || "")).toLowerCase().includes(q))
+    : state.products;
+  if (!hits.length) { el.innerHTML = emptyMsg(`「${esc(q)}」に一致する製品はありません。`); return; }
   const groups = {};
-  state.products.forEach((p) => { const c = p.category || "未分類"; (groups[c] = groups[c] || []).push(p); });
+  hits.forEach((p) => { const c = p.category || "未分類"; (groups[c] = groups[c] || []).push(p); });
   let cats = Object.keys(groups).sort((a, b) => a === "未分類" ? 1 : b === "未分類" ? -1 : a.localeCompare(b, "ja"));
   if (filter !== "all") cats = cats.filter((c) => c === filter);
   if (!cats.length) { el.innerHTML = emptyMsg("該当する製品はありません。"); return; }
@@ -848,6 +926,165 @@ function renderInventory() {
     return head + rows;
   }).join("");
   el.innerHTML = `<table><thead><tr><th>製品名</th><th class="num">木地在庫</th><th class="num">在庫（完成）</th><th class="num">予定</th><th class="center">状態</th><th class="center">明細</th>${canEdit ? "<th></th>" : ""}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+/* ──────────────── 分析 ──────────────── */
+/* 期間の開始日（"all" なら null）。月数で遡る。 */
+function analysisFrom() {
+  const v = document.getElementById("an-period").value;
+  if (v === "all") return null;
+  const d = new Date();
+  if (v === "1") { d.setDate(1); }
+  else { d.setMonth(d.getMonth() - Number(v)); }
+  return d.toISOString().slice(0, 10);
+}
+const inRange = (date, from) => !!date && (!from || date >= from);
+
+/* 行の一覧 → 棒つきテーブル。cols は {key,label,num,bar} の配列 */
+function statTable(rows, cols, emptyText) {
+  if (!rows.length) return emptyMsg(emptyText);
+  const maxes = {};
+  cols.forEach((c) => { if (c.bar) maxes[c.key] = Math.max(1, ...rows.map((r) => Number(r[c.key]) || 0)); });
+  const head = cols.map((c) => `<th class="${c.num ? "num" : ""}">${esc(c.label)}</th>`).join("");
+  const body = rows.map((r) => `<tr>${cols.map((c) => {
+    const v = r[c.key];
+    if (c.bar) {
+      const pct = Math.round(((Number(v) || 0) / maxes[c.key]) * 100);
+      return `<td class="num"><div class="statcell"><span class="statnum">${c.fmt ? c.fmt(v, r) : num(v)}</span><span class="statbar"><i style="width:${pct}%"></i></span></div></td>`;
+    }
+    return `<td class="${c.num ? "num" : ""}">${c.fmt ? c.fmt(v, r) : esc(String(v ?? ""))}</td>`;
+  }).join("")}</tr>`).join("");
+  return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+function analysisData() {
+  const from = analysisFrom();
+  const lots = state.lots;
+  const losses = state.losses || [];
+
+  /* 製品別 */
+  const byProduct = state.products.map((p) => {
+    const painted = lots.filter((l) => l.productId === p.id && l.paintedDate && inRange(l.paintedDate, from))
+      .reduce((s, l) => s + (Number(l.qty) || 0), 0);
+    const shipped = lots.filter((l) => l.productId === p.id && l.status === "shipped" && inRange(l.shippedDate, from))
+      .reduce((s, l) => s + (Number(l.qty) || 0), 0);
+    const defect = losses.filter((x) => x.productId === p.id && inRange(x.lossDate, from))
+      .reduce((s, x) => s + (Number(x.qty) || 0), 0);
+    return { name: p.name, category: p.category || "未分類", painted, shipped,
+             stock: finishedStock(p.id), kiji: rawStock(p.id), defect,
+             rate: painted + defect > 0 ? (defect / (painted + defect)) * 100 : 0 };
+  }).filter((r) => r.painted || r.shipped || r.stock || r.kiji || r.defect)
+    .sort((a, b) => b.shipped - a.shipped || b.painted - a.painted);
+
+  /* カラー別 */
+  const cmap = {};
+  const touch = (c) => (cmap[c] = cmap[c] || { color: c, painted: 0, shipped: 0, stock: 0, defect: 0 });
+  lots.forEach((l) => {
+    const c = l.color || "（無色）";
+    if (l.paintedDate && inRange(l.paintedDate, from)) touch(c).painted += Number(l.qty) || 0;
+    if (l.status === "shipped" && inRange(l.shippedDate, from)) touch(c).shipped += Number(l.qty) || 0;
+    if (l.status === "painted") touch(c).stock += Number(l.qty) || 0;
+  });
+  losses.forEach((x) => {
+    if (x.bucket !== "painted" || !inRange(x.lossDate, from)) return;
+    const c = x.color || "（無色）";
+    touch(c).defect += Number(x.qty) || 0;
+    touch(c).stock -= Number(x.qty) || 0;
+  });
+  const byColor = Object.values(cmap).filter((r) => r.painted || r.shipped || r.stock > 0 || r.defect)
+    .sort((a, b) => b.shipped - a.shipped || b.painted - a.painted);
+
+  /* 出荷先別 */
+  const dmap = {};
+  lots.filter((l) => l.status === "shipped" && inRange(l.shippedDate, from)).forEach((l) => {
+    const d = l.dest || "（未設定）";
+    dmap[d] = dmap[d] || { dest: d, qty: 0, count: 0 };
+    dmap[d].qty += Number(l.qty) || 0;
+    dmap[d].count += 1;
+  });
+  const byDest = Object.values(dmap).sort((a, b) => b.qty - a.qty);
+
+  /* 月別（塗装・出荷・不良） */
+  const mmap = {};
+  const mtouch = (m) => (mmap[m] = mmap[m] || { month: m, painted: 0, shipped: 0, defect: 0 });
+  lots.forEach((l) => {
+    if (l.paintedDate && inRange(l.paintedDate, from)) mtouch(l.paintedDate.slice(0, 7)).painted += Number(l.qty) || 0;
+    if (l.status === "shipped" && inRange(l.shippedDate, from)) mtouch(l.shippedDate.slice(0, 7)).shipped += Number(l.qty) || 0;
+  });
+  losses.forEach((x) => { if (inRange(x.lossDate, from)) mtouch(x.lossDate.slice(0, 7)).defect += Number(x.qty) || 0; });
+  const byMonth = Object.values(mmap).sort((a, b) => b.month.localeCompare(a.month));
+
+  /* 発生工程別の不良 */
+  const smap = {};
+  losses.filter((x) => inRange(x.lossDate, from)).forEach((x) => {
+    const s = x.stage || "（未記入）";
+    smap[s] = smap[s] || { stage: s, qty: 0, count: 0 };
+    smap[s].qty += Number(x.qty) || 0;
+    smap[s].count += 1;
+  });
+  const byStage = Object.values(smap).sort((a, b) => b.qty - a.qty);
+
+  return { from, byProduct, byColor, byDest, byMonth, byStage };
+}
+
+function renderAnalysis() {
+  const d = analysisData();
+  const el = document.getElementById("analysis-body");
+  const periodLabel = d.from ? `${fmtDate(d.from)} 以降` : "全期間";
+  const totPainted = d.byMonth.reduce((s, m) => s + m.painted, 0);
+  const totShipped = d.byMonth.reduce((s, m) => s + m.shipped, 0);
+  const totDefect = d.byMonth.reduce((s, m) => s + m.defect, 0);
+  const rate = totPainted + totDefect > 0 ? (totDefect / (totPainted + totDefect)) * 100 : 0;
+
+  const panel = (title, sub, tableHtml, csvKey) => `
+    <div class="panel">
+      <div class="panel-head">
+        <div><h3>${esc(title)}</h3><span class="count">${esc(sub)}</span></div>
+        <button class="btn sm ghost" data-action="export-analysis" data-id="${csvKey}">CSV</button>
+      </div>
+      <div class="panel-body">${tableHtml}</div>
+    </div>`;
+
+  el.innerHTML = `
+    <div class="kpi-grid" style="margin-bottom:24px;">
+      <div class="kpi"><div class="kpi-label">塗装（完成）</div><div class="kpi-value">${num(totPainted)}<small>点</small></div><div class="kpi-note">${esc(periodLabel)}</div></div>
+      <div class="kpi"><div class="kpi-label">出荷</div><div class="kpi-value">${num(totShipped)}<small>点</small></div><div class="kpi-note">${esc(periodLabel)}</div></div>
+      <div class="kpi"><div class="kpi-label">不良・破損</div><div class="kpi-value">${num(totDefect)}<small>点</small></div><div class="kpi-note">${esc(periodLabel)}</div></div>
+      <div class="kpi ${rate >= 5 ? "alert" : ""}"><div class="kpi-label">不良率</div><div class="kpi-value">${rate.toFixed(1)}<small>%</small></div><div class="kpi-note">不良 ÷（完成＋不良）</div></div>
+    </div>
+    ${panel("製品別", "出荷の多い順", statTable(d.byProduct, [
+      { key: "name", label: "製品" },
+      { key: "category", label: "カテゴリ" },
+      { key: "painted", label: "塗装", num: true, bar: true },
+      { key: "shipped", label: "出荷", num: true, bar: true },
+      { key: "kiji", label: "木地在庫", num: true },
+      { key: "stock", label: "在庫", num: true },
+      { key: "defect", label: "不良", num: true },
+      { key: "rate", label: "不良率", num: true, fmt: (v) => v > 0 ? v.toFixed(1) + "%" : "—" },
+    ], "この期間の記録がありません。"), "product")}
+    ${panel("カラー別", "どの色が動いているか", statTable(d.byColor, [
+      { key: "color", label: "カラー" },
+      { key: "painted", label: "塗装", num: true, bar: true },
+      { key: "shipped", label: "出荷", num: true, bar: true },
+      { key: "stock", label: "在庫", num: true },
+      { key: "defect", label: "不良", num: true },
+    ], "この期間の記録がありません。"), "color")}
+    ${panel("出荷先別", "出荷数の多い順", statTable(d.byDest, [
+      { key: "dest", label: "出荷先" },
+      { key: "qty", label: "出荷数", num: true, bar: true },
+      { key: "count", label: "件数", num: true },
+    ], "この期間の出荷はありません。"), "dest")}
+    ${panel("月別推移", "新しい月が上", statTable(d.byMonth, [
+      { key: "month", label: "月", fmt: (v) => esc(v.replace("-", "/")) },
+      { key: "painted", label: "塗装", num: true, bar: true },
+      { key: "shipped", label: "出荷", num: true, bar: true },
+      { key: "defect", label: "不良", num: true },
+    ], "この期間の記録がありません。"), "month")}
+    ${panel("不良の発生工程", "どこで壊れているか", statTable(d.byStage, [
+      { key: "stage", label: "工程" },
+      { key: "qty", label: "数量", num: true, bar: true },
+      { key: "count", label: "件数", num: true },
+    ], "この期間の不良記録はありません。"), "stage")}`;
 }
 
 function renderUsers() {
@@ -1051,12 +1288,13 @@ function openProductDetail(pid) {
       <td><span class="chip">${x.bucket === "kiji" ? "木地在庫" : "完成在庫"}</span></td>
       <td class="num strong-num" style="color:var(--bad)">−${num(x.qty)}</td>
       <td>${x.color ? `<span class="chip">${esc(x.color)}</span>` : '<span class="muted">—</span>'}</td>
+      <td>${x.stage ? `<span class="chip">${esc(x.stage)}</span>` : '<span class="muted">—</span>'}</td>
       <td class="muted">${esc(x.reason || "")}</td>
       <td class="muted">${esc(x.createdBy || "")}</td>
       ${isEditor() ? `<td class="row-actions"><button class="btn sm ghost danger" data-action="del-loss" data-id="${x.id}" data-pid="${pid}">取消</button></td>` : ""}
     </tr>`).join("");
-    lossTable = `<h4 style="font-family:var(--serif);font-size:1.05rem;margin:18px 0 8px;color:var(--bad);">破損・ロス記録</h4>
-      <div class="table-wrap"><table><thead><tr><th>日付</th><th>対象在庫</th><th class="num">数量</th><th>カラー</th><th>理由・段階</th><th>記録者</th>${isEditor() ? "<th></th>" : ""}</tr></thead><tbody>${lrows}</tbody></table></div>`;
+    lossTable = `<h4 style="font-family:var(--serif);font-size:1.05rem;margin:18px 0 8px;color:var(--bad);">破損・ロス記録<span class="muted" style="font-size:0.8rem;font-weight:400;margin-left:8px;">不良率 ${defectRate(pid).toFixed(1)}%</span></h4>
+      <div class="table-wrap"><table><thead><tr><th>日付</th><th>対象在庫</th><th class="num">数量</th><th>カラー</th><th>発生工程</th><th>理由</th><th>記録者</th>${isEditor() ? "<th></th>" : ""}</tr></thead><tbody>${lrows}</tbody></table></div>`;
   }
   /* 塗装指示の履歴（製品ごと、新しい順） */
   const insts = (state.paintInstructions || []).filter((x) => x.productId === pid);
@@ -1113,8 +1351,9 @@ function openLossForm(pid) {
       <div class="field-group" id="ls-color-row" style="display:${defaultBucket === "painted" ? "" : "none"};"><label class="field">カラー${hasColored ? " *" : "（任意）"}</label><select id="ls-color">${colorOpts}</select></div>
       <div class="field-row">
         <div class="field-group"><label class="field">日付</label><input type="date" id="ls-date" value="${todayStr()}"></div>
-        <div class="field-group"><label class="field">理由・段階</label><input type="text" id="ls-reason" placeholder="例：塗装中に破損 / 出荷前まとめで破損"></div>
+        <div class="field-group"><label class="field">発生工程</label><select id="ls-stage">${LOSS_STAGES.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join("")}</select></div>
       </div>
+      <div class="field-group"><label class="field">理由・メモ（任意）</label><input type="text" id="ls-reason" placeholder="例：木口が欠けた / 色ムラ"></div>
       <div class="form-error" id="ls-err"></div>
     </div>
     <div class="modal-foot"><button class="btn ghost" data-action="close">キャンセル</button><button class="btn danger" data-action="save-loss" data-id="${pid}">在庫を減らす</button></div>`);
@@ -1128,11 +1367,12 @@ async function saveLoss(pid) {
   const qty = parseInt(document.getElementById("ls-qty").value, 10) || 0;
   const color = bucket === "painted" ? document.getElementById("ls-color").value : "";
   const lossDate = document.getElementById("ls-date").value;
+  const stage = document.getElementById("ls-stage").value;
   const reason = document.getElementById("ls-reason").value.trim();
   const err = document.getElementById("ls-err");
   if (qty < 1) { err.textContent = "数量は1以上で入力してください。"; return; }
   try {
-    const d = await api("record_loss", { productId: pid, bucket, qty, color, lossDate, reason });
+    const d = await api("record_loss", { productId: pid, bucket, qty, color, lossDate, stage, reason });
     state = d.state; closeModal(); reopenDetailOrRender(); toast("破損・ロスを記録しました");
   } catch (e) { err.textContent = e.message; }
 }
@@ -1332,12 +1572,97 @@ async function exportJSON() {
     toast("完全バックアップを書き出しました（移行用：ユーザー情報も含む）");
   } catch (e) { toast("書き出しに失敗しました：" + e.message, true); }
 }
-function exportCSV() {
-  const header = ["製品名", "カテゴリ", "木地在庫", "在庫", "安全在庫", "予定", "予測在庫", "状態"];
-  const lines = state.products.map((p) => [p.name, p.category || "", rawStock(p.id), finishedStock(p.id), p.safetyStock, plannedQty(p.id), projectedStock(p.id), stockState(p.id).label]
-    .map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","));
-  download(`petit-continue-stock-${todayStr()}.csv`, "﻿" + [header.join(","), ...lines].join("\r\n"), "text/csv");
-  toast("在庫CSVを書き出しました");
+/* 行配列（先頭がヘッダ）をCSVにして保存。Excelで開けるようBOM＋CRLF。 */
+function downloadCSV(name, rows) {
+  const body = rows.map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  download(`${name}-${todayStr()}.csv`, "﻿" + body, "text/csv");
+  toast(`${name} を書き出しました`);
+}
+
+/* データ管理タブの各CSV */
+const CSV_SETS = {
+  stock: () => ["在庫一覧", [
+    ["製品名", "カテゴリ", "木地在庫", "在庫（完成）", "カラー内訳", "安全在庫", "予定", "破損計", "不良率(%)", "木地滞留(日)", "状態"],
+    ...state.products.map((p) => {
+      const cb = finishedByColor(p.id);
+      return [p.name, p.category || "", rawStock(p.id), finishedStock(p.id),
+        Object.entries(cb).map(([c, q]) => `${c}×${q}`).join(" "),
+        p.safetyStock, plannedQty(p.id), lossQty(p.id), defectRate(p.id).toFixed(1),
+        kijiAgingDays(p.id) || "", stockState(p.id).label];
+    }),
+  ]],
+  lots: () => ["ロット一覧", [
+    ["製品名", "カテゴリ", "ロット番号", "数量", "状態", "カラー", "完成予定日", "木地完成日", "塗装済日", "出荷日", "出荷先", "メモ"],
+    ...state.lots.map((l) => {
+      const p = productById(l.productId);
+      return [p ? p.name : "（削除済）", p ? (p.category || "") : "", l.lotNo || "", l.qty,
+        STATUS[l.status] ? STATUS[l.status].label : l.status, l.color || "",
+        l.dueDate || "", l.kijiDate || "", l.paintedDate || "", l.shippedDate || "", l.dest || "", l.note || ""];
+    }),
+  ]],
+  shipments: () => ["出荷一覧", [
+    ["出荷日", "製品名", "カテゴリ", "ロット番号", "カラー", "数量", "出荷先", "メモ"],
+    ...state.lots.filter((l) => l.status === "shipped")
+      .sort((a, b) => (b.shippedDate || "").localeCompare(a.shippedDate || ""))
+      .map((l) => {
+        const p = productById(l.productId);
+        return [l.shippedDate || "", p ? p.name : "（削除済）", p ? (p.category || "") : "",
+          l.lotNo || "", l.color || "", l.qty, l.dest || "", l.note || ""];
+      }),
+  ]],
+  losses: () => ["不良・破損一覧", [
+    ["日付", "製品名", "カテゴリ", "対象在庫", "数量", "カラー", "発生工程", "理由", "記録者"],
+    ...(state.losses || []).map((x) => {
+      const p = productById(x.productId);
+      return [x.lossDate || "", p ? p.name : "（削除済）", p ? (p.category || "") : "",
+        x.bucket === "kiji" ? "木地在庫" : "在庫（完成）", x.qty, x.color || "",
+        x.stage || "", x.reason || "", x.createdBy || ""];
+    }),
+  ]],
+  paint: () => ["塗装指示一覧", [
+    ["塗装日", "製品名", "木地ロット", "木地完成日", "内訳", "合計", "出荷予定日", "指示者"],
+    ...(state.paintInstructions || []).map((x) => {
+      const p = productById(x.productId);
+      return [x.paintDate || "", p ? p.name : "（削除済）", x.kijiLotNo || "", x.kijiDate || "",
+        (x.items || []).map((i) => `${i.color || "無色"}×${i.qty}`).join(" "),
+        x.totalQty, x.shipBy || "", x.createdBy || ""];
+    }),
+  ]],
+};
+function exportCSV(kind) {
+  const build = CSV_SETS[kind] || CSV_SETS.stock;
+  const [name, rows] = build();
+  downloadCSV(name, rows);
+}
+
+/* 分析タブの各表をCSVに */
+function exportAnalysisCSV(kind) {
+  const d = analysisData();
+  const suffix = d.from ? `（${d.from}以降）` : "（全期間）";
+  const sets = {
+    product: ["分析-製品別" + suffix, [
+      ["製品", "カテゴリ", "塗装", "出荷", "木地在庫", "在庫", "不良", "不良率(%)"],
+      ...d.byProduct.map((r) => [r.name, r.category, r.painted, r.shipped, r.kiji, r.stock, r.defect, r.rate.toFixed(1)]),
+    ]],
+    color: ["分析-カラー別" + suffix, [
+      ["カラー", "塗装", "出荷", "在庫", "不良"],
+      ...d.byColor.map((r) => [r.color, r.painted, r.shipped, r.stock, r.defect]),
+    ]],
+    dest: ["分析-出荷先別" + suffix, [
+      ["出荷先", "出荷数", "件数"],
+      ...d.byDest.map((r) => [r.dest, r.qty, r.count]),
+    ]],
+    month: ["分析-月別" + suffix, [
+      ["月", "塗装", "出荷", "不良"],
+      ...d.byMonth.map((r) => [r.month, r.painted, r.shipped, r.defect]),
+    ]],
+    stage: ["分析-発生工程別" + suffix, [
+      ["工程", "数量", "件数"],
+      ...d.byStage.map((r) => [r.stage, r.qty, r.count]),
+    ]],
+  };
+  const [name, rows] = sets[kind] || sets.product;
+  downloadCSV(name, rows);
 }
 function importJSON(file) {
   const reader = new FileReader();
@@ -1370,6 +1695,8 @@ function switchView(view) {
 }
 document.getElementById("tabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-view]"); if (b) switchView(b.dataset.view); });
 document.getElementById("inv-filter").addEventListener("change", renderInventory);
+document.getElementById("inv-search").addEventListener("input", renderInventory);
+document.getElementById("an-period").addEventListener("change", renderAnalysis);
 
 /* ──────────────── アクション ──────────────── */
 const EDITOR_ACTIONS = new Set([
@@ -1447,7 +1774,8 @@ document.body.addEventListener("click", (e) => {
     }
     case "reload-audit": renderAudit(); break;
     case "export-json": exportJSON(); break;
-    case "export-csv": exportCSV(); break;
+    case "export-csv": exportCSV(id || "stock"); break;
+    case "export-analysis": exportAnalysisCSV(id); break;
     case "import-json": document.getElementById("import-file").click(); break;
     case "reset":
       confirmModal("初期状態にリセット", "在庫・製品・生産予定をサンプル初期状態に戻します（ユーザーは保持）。実行にはパスワードが必要です。",

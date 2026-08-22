@@ -290,6 +290,7 @@ case 'delete_lot': {
       $qty = (int)($b['qty'] ?? 0);
       $color = $bucket === 'painted' ? trim($b['color'] ?? '') : '';
       $lossDate = trim($b['lossDate'] ?? '') ?: date('Y-m-d');
+      $stage = trim($b['stage'] ?? '');
       $reason = trim($b['reason'] ?? '');
       $p = product_by_id($pid);
       if (!$p) fail('対象の製品が見つかりません。');
@@ -311,9 +312,9 @@ case 'delete_lot': {
         if ($qty > $avail) fail("{$bucketLabel}の残数は {$avail} です。それを超えて減らせません。");
       }
       $lid = uuid();
-      $pdo->prepare('INSERT INTO losses (id, product_id, bucket, qty, color, loss_date, reason, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)')
-          ->execute([$lid, $pid, $bucket, $qty, $color, $lossDate, $reason, $u['email'], now()]);
-      audit($u, 'loss', 'loss', $lid, "破損/ロス: {$p['name']} {$bucketLabel}×{$qty}" . ($color ? "（{$color}）" : '') . ($reason ? " ／ {$reason}" : ''));
+      $pdo->prepare('INSERT INTO losses (id, product_id, bucket, qty, color, loss_date, stage, reason, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
+          ->execute([$lid, $pid, $bucket, $qty, $color, $lossDate, $stage, $reason, $u['email'], now()]);
+      audit($u, 'loss', 'loss', $lid, "破損/ロス: {$p['name']} {$bucketLabel}×{$qty}" . ($color ? "（{$color}）" : '') . ($stage ? " ／ {$stage}" : '') . ($reason ? " ／ {$reason}" : ''));
       json_out(['state' => get_state($u)]);
     }
 
@@ -426,7 +427,7 @@ case 'delete_lot': {
         'exportedAt' => now(),
         'products' => array_map('map_product', $pdo->query('SELECT * FROM products ORDER BY name')->fetchAll()),
         'lots' => array_map('map_lot', $pdo->query('SELECT * FROM lots')->fetchAll()),
-        'losses' => array_map('map_loss', $pdo->query('SELECT * FROM losses ORDER BY created_at DESC')->fetchAll()),
+        'losses' => array_map('map_loss', $pdo->query('SELECT * FROM losses ORDER BY loss_date DESC, created_at DESC')->fetchAll()),
         'paintInstructions' => array_map('map_paint_instruction', $pdo->query('SELECT * FROM paint_instructions ORDER BY created_at DESC')->fetchAll()),
         'destinations' => array_map(fn($r) => $r['name'], $pdo->query('SELECT name FROM destinations ORDER BY name')->fetchAll()),
         'users' => array_map(fn($r) => ['id' => $r['id'], 'email' => $r['email'], 'name' => $r['name'], 'role' => $r['role'], 'passHash' => $r['pass_hash'], 'createdAt' => $r['created_at']], $userRows),

@@ -1,0 +1,6 @@
+# 秘密情報・ローカルDBはコミットしない
+api/config.php
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

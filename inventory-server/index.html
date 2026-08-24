@@ -225,7 +225,9 @@ label.field { display: block; font-size: 0.74rem; color: var(--muted); margin-bo
 
 .empty { text-align: center; padding: 48px 24px; color: var(--muted); }
 .empty-icon { font-size: 2rem; color: var(--gold-light); margin-bottom: 10px; }
-.row-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+/* table-cell のまま右端に固定できるよう flex は使わない（sticky が効かなくなるため） */
+.row-actions { white-space: nowrap; text-align: right; }
+.row-actions .btn { margin-left: 6px; }
 /* 横スクロールする表でも操作ボタンが隠れないよう右端に固定 */
 .table-wrap td.row-actions, .table-wrap thead th:last-child {
   position: sticky; right: 0; z-index: 1;
@@ -233,6 +235,9 @@ label.field { display: block; font-size: 0.74rem; color: var(--muted); margin-bo
   box-shadow: -10px 0 10px -10px rgba(26, 23, 21, 0.18);
 }
 .table-wrap thead th:last-child { background: var(--cream); }
+/* 在庫の数字とその操作ボタンを並べる */
+.stock-cell { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.reserved { font-size: 0.68rem; color: var(--warn); margin-top: 3px; font-weight: 600; }
 
 /* ── Modal ── */
 .modal-overlay { position: fixed; inset: 0; background: rgba(26,23,21,0.42); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
@@ -344,10 +349,20 @@ body.locked .app-header, body.locked main { display: none; }
     <div class="view-head">
       <div>
         <h1 class="view-title">出荷</h1>
-        <p class="view-sub">状態を「出荷済」にしたロットの一覧です。出荷は生産予定で状態を進めて登録します。</p>
+        <p class="view-sub">先に予定を入れておき、出したら「出荷した」を押します。予定のぶんは在庫から取り置き扱いになります。</p>
+      </div>
+      <div class="toolbar">
+        <button class="btn editor-only" data-action="new-plan">＋ 出荷予定を追加</button>
       </div>
     </div>
-    <div class="panel"><div class="panel-body table-wrap" id="shipments-table"></div></div>
+    <div class="panel">
+      <div class="panel-head"><h3>出荷予定</h3><span class="count" id="plan-count"></span></div>
+      <div class="panel-body table-wrap" id="plans-table"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>出荷済</h3><span class="count">出荷日の新しい順</span></div>
+      <div class="panel-body table-wrap" id="shipments-table"></div>
+    </div>
   </section>
 
   <!-- ===== Inventory / Products ===== -->
@@ -499,7 +514,7 @@ async function api(action, payload, method) {
 }
 
 /* ──────────────── 状態 ──────────────── */
-const emptyState = () => ({ products: [], lots: [], losses: [], paintInstructions: [], destinations: [], users: [] });
+const emptyState = () => ({ products: [], lots: [], losses: [], paintInstructions: [], shipmentPlans: [], destinations: [], users: [] });
 let state = emptyState();
 let me = null;
 async function refresh() { const d = await api("state"); state = d.state; render(); }
@@ -622,6 +637,20 @@ const producedQty = (pid) => state.lots
 const defectRate = (pid) => {
   const made = producedQty(pid);
   return made > 0 ? (lossQty(pid) / made) * 100 : 0;
+};
+
+/* 出荷予定で押さえてある数（未消化のみ） */
+const openPlans = () => (state.shipmentPlans || []).filter((x) => x.status !== "done");
+const reservedQty = (pid, color) => openPlans()
+  .filter((x) => x.productId === pid && (color === undefined || (x.color || "") === color))
+  .reduce((s, x) => s + (Number(x.qty) || 0), 0);
+/* 予約を引いた「すぐ出せる数」 */
+const availableStock = (pid) => finishedStock(pid) - reservedQty(pid);
+const reservedHtml = (pid) => {
+  const r = reservedQty(pid);
+  if (!r) return "";
+  const short = r > finishedStock(pid);
+  return `<div class="reserved"${short ? ' style="color:var(--bad)"' : ""}>出荷予定 ${num(r)}${short ? "（在庫不足）" : ""}</div>`;
 };
 
 /* 木地在庫の滞留：いちばん古い木地ロットが何日動いていないか */
@@ -798,7 +827,13 @@ function renderDashboard() {
     : `<div class="alert-banner none">✓ すべての製品が安全在庫を満たしています。</div>`)
     + (aged.length
       ? `<div class="alert-banner" style="margin-top:10px;">⏳ 木地在庫が ${AGING_DAYS} 日以上動いていない製品が <strong>&nbsp;${aged.length}&nbsp;</strong> 件あります（${esc(aged.slice(0, 3).map((p) => p.name).join("、"))}${aged.length > 3 ? " ほか" : ""}）。</div>`
-      : "");
+      : "")
+    + (() => {
+        const due = openPlans().filter((x) => x.planDate && x.planDate <= todayStr());
+        return due.length
+          ? `<div class="alert-banner" style="margin-top:10px;">📦 出荷予定日を迎えた出荷が <strong>&nbsp;${due.length}&nbsp;</strong> 件あります。<button class="btn sm ghost" data-action="go-shipments" style="margin-left:10px;">出荷タブを開く</button></div>`
+          : "";
+      })();
 
   document.getElementById("kpi-grid").innerHTML = `
     <div class="kpi"><div class="kpi-label">登録製品数</div><div class="kpi-value">${num(state.products.length)}<small>品目</small></div><div class="kpi-note">マスタ登録された製品</div></div>
@@ -872,6 +907,7 @@ function renderProduction() {
 }
 
 function renderShipments() {
+  renderPlans();
   const canEdit = isEditor();
   const rows = state.lots.filter((l) => l.status === "shipped").sort((a, b) => (b.shippedDate || "").localeCompare(a.shippedDate || ""));
   const el = document.getElementById("shipments-table");
@@ -890,6 +926,96 @@ function renderShipments() {
     </tr>`;
   }).join("");
   el.innerHTML = `<table><thead><tr><th>出荷日</th><th>ロット番号</th><th>製品</th><th class="num">数量</th><th>カラー</th><th>出荷先</th><th>メモ</th>${canEdit ? "<th></th>" : ""}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+/* 出荷予定の一覧（予定日の早い順） */
+function renderPlans() {
+  const canEdit = isEditor();
+  const plans = openPlans().slice().sort((a, b) => (a.planDate || "9999").localeCompare(b.planDate || "9999"));
+  const el = document.getElementById("plans-table");
+  document.getElementById("plan-count").textContent = plans.length ? `${plans.length} 件` : "";
+  if (!plans.length) { el.innerHTML = emptyMsg("出荷予定はありません。"); return; }
+  const body = plans.map((x) => {
+    const p = productById(x.productId);
+    const late = x.planDate && x.planDate < todayStr();
+    const soon = x.planDate === todayStr();
+    /* その色の在庫が予定数に足りているか */
+    const stockForColor = finishedByColor(x.productId)[x.color || "（無）"] || 0;
+    const short = stockForColor < x.qty;
+    return `<tr>
+      <td>${esc(fmtDate(x.planDate))}${late ? '<span class="badge bad" style="margin-left:6px;">遅れ</span>' : soon ? '<span class="badge warn" style="margin-left:6px;">本日</span>' : ""}</td>
+      <td><div class="prod-name">${esc(p ? p.name : "（削除済）")}</div><div class="prod-cat">${esc(p ? (p.category || "未分類") : "")}</div></td>
+      <td>${x.color ? `<span class="chip">${esc(x.color)}</span>` : '<span class="muted">無色</span>'}</td>
+      <td class="num strong-num">${num(x.qty)}</td>
+      <td>${short ? `<span class="badge bad">在庫 ${num(stockForColor)}</span>` : `<span class="badge ok">在庫あり</span>`}</td>
+      <td>${esc(x.dest || "—")}</td>
+      <td class="muted">${esc(x.note || "")}</td>
+      ${canEdit ? `<td class="row-actions"><button class="btn sm" data-action="fulfill-plan" data-id="${x.id}"${short ? " disabled title=\"在庫が足りません\"" : ""}>出荷した</button><button class="btn sm ghost" data-action="edit-plan" data-id="${x.id}">編集</button><button class="btn sm ghost danger" data-action="delete-plan" data-id="${x.id}">取消</button></td>` : ""}
+    </tr>`;
+  }).join("");
+  el.innerHTML = `<table><thead><tr><th>出荷予定日</th><th>製品</th><th>カラー</th><th class="num">数量</th><th>在庫</th><th>出荷先</th><th>メモ</th>${canEdit ? "<th></th>" : ""}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+/* 出荷予定フォーム */
+function openPlanForm(planId) {
+  const plan = planId ? openPlans().find((x) => x.id === planId) : null;
+  const prods = state.products.slice().sort((a, b) => a.name.localeCompare(b.name, "ja"));
+  if (!prods.length) { toast("先に製品を登録してください", true); return; }
+  const pid = plan ? plan.productId : prods[0].id;
+  openModal(`
+    <div class="modal-head"><h3>${plan ? "出荷予定を編集" : "出荷予定を追加"}</h3><p>先に予定を入れておくと、その数は在庫から取り置き扱いになります。</p></div>
+    <div class="modal-body">
+      <div class="field-group"><label class="field">製品 *</label><select id="pl-product">${prods.map((p) => `<option value="${p.id}" ${p.id === pid ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
+      <div class="field-row">
+        <div class="field-group"><label class="field">カラー</label><select id="pl-color"></select></div>
+        <div class="field-group"><label class="field">数量 *</label><input type="number" id="pl-qty" min="1" step="1" value="${plan ? plan.qty : 1}"></div>
+      </div>
+      <div class="field-row">
+        <div class="field-group"><label class="field">出荷予定日 *</label><input type="date" id="pl-date" value="${plan ? esc(plan.planDate) : todayStr()}"></div>
+        <div class="field-group"><label class="field">出荷先 *</label><input type="text" id="pl-dest" list="dest-options" value="${plan ? esc(plan.dest) : ""}" placeholder="出荷先名">${destDatalist()}</div>
+      </div>
+      <div class="field-group"><label class="field">メモ（任意）</label><input type="text" id="pl-note" value="${plan ? esc(plan.note || "") : ""}" placeholder="例：注文番号・便名など"></div>
+      <div class="hint" id="pl-stock" style="margin-top:-6px;"></div>
+      <div class="form-error" id="pl-err"></div>
+    </div>
+    <div class="modal-foot"><button class="btn ghost" data-action="close">キャンセル</button><button class="btn" data-action="save-plan" data-id="${planId || ""}">保存</button></div>`);
+  const prodSel = document.getElementById("pl-product");
+  const colorSel = document.getElementById("pl-color");
+  function fillColors() {
+    const m = finishedByColor(prodSel.value);
+    const keys = Object.keys(m);
+    const want = plan ? (plan.color || "（無）") : null;
+    colorSel.innerHTML = keys.length
+      ? keys.map((c) => `<option value="${esc(c === "（無）" ? "" : c)}" ${want === c ? "selected" : ""}>${esc(c)}（在庫 ${num(m[c])}）</option>`).join("")
+      : `<option value="">（在庫なし）</option>`;
+    showStock();
+  }
+  function showStock() {
+    const m = finishedByColor(prodSel.value);
+    const c = colorSel.value || "（無）";
+    const have = m[c] || 0;
+    const reserved = reservedQty(prodSel.value, colorSel.value) - (plan && plan.productId === prodSel.value && (plan.color || "") === colorSel.value ? plan.qty : 0);
+    document.getElementById("pl-stock").textContent = `いまの在庫 ${have} 点${reserved ? `（うち他の予定で ${reserved} 点を予約済）` : ""}`;
+  }
+  prodSel.addEventListener("change", fillColors);
+  colorSel.addEventListener("change", showStock);
+  fillColors();
+}
+async function savePlan(planId) {
+  const productId = document.getElementById("pl-product").value;
+  const color = document.getElementById("pl-color").value;
+  const qty = parseInt(document.getElementById("pl-qty").value, 10) || 0;
+  const planDate = document.getElementById("pl-date").value;
+  const dest = document.getElementById("pl-dest").value.trim();
+  const note = document.getElementById("pl-note").value.trim();
+  const err = document.getElementById("pl-err");
+  if (qty < 1) { err.textContent = "数量は1以上で入力してください。"; return; }
+  if (!dest) { err.textContent = "出荷先を入力してください。"; return; }
+  if (!planDate) { err.textContent = "出荷予定日を入力してください。"; return; }
+  try {
+    const d = await api("save_shipment_plan", { id: planId || undefined, productId, color, qty, dest, planDate, note });
+    state = d.state; closeModal(); render(); toast(planId ? "出荷予定を更新しました" : "出荷予定を追加しました");
+  } catch (e) { err.textContent = e.message; }
 }
 
 function syncInvFilter() {
@@ -927,12 +1053,12 @@ function renderInventory() {
       const fQty = finishedStock(p.id);
       return `<tr>
         <td><button class="prod-link" data-action="product-detail" data-id="${p.id}">${esc(p.name)}</button></td>
-        <td class="num"><span class="strong-num muted">${num(kQty)}</span>${kijiLotsHtml(p.id)}</td>
-        <td class="num"><span class="strong-num">${num(fQty)}</span>${colorBreakHtml(p.id)}</td>
+        <td class="num"><div class="stock-cell"><span class="strong-num muted">${num(kQty)}</span>${canEdit && kQty > 0 ? `<button class="btn sm" data-action="new-paint" data-id="${p.id}" title="木地在庫を塗装する">塗装</button>` : ""}</div>${kijiLotsHtml(p.id)}</td>
+        <td class="num"><div class="stock-cell"><span class="strong-num">${num(fQty)}</span>${canEdit && fQty > 0 ? `<button class="btn sm" data-action="new-ship" data-id="${p.id}" title="在庫から出荷する">出荷</button>` : ""}</div>${colorBreakHtml(p.id)}${reservedHtml(p.id)}</td>
         <td class="num muted">${num(plannedQty(p.id))}</td>
         <td class="center"><span class="badge ${st.key}">${st.label}</span></td>
         <td class="center"><button class="btn sm ghost" data-action="product-detail" data-id="${p.id}">明細</button></td>
-        ${canEdit ? `<td class="row-actions">${kQty > 0 ? `<button class="btn sm ghost" data-action="new-paint" data-id="${p.id}" title="木地在庫を塗装する">塗装</button>` : ""}${fQty > 0 ? `<button class="btn sm ghost" data-action="new-ship" data-id="${p.id}" title="在庫から出荷する">出荷</button>` : ""}<button class="btn sm ghost" data-action="edit-product" data-id="${p.id}">編集</button><button class="btn sm ghost danger" data-action="delete-product" data-id="${p.id}">削除</button></td>` : ""}
+        ${canEdit ? `<td class="row-actions"><button class="btn sm ghost" data-action="edit-product" data-id="${p.id}">編集</button><button class="btn sm ghost danger" data-action="delete-product" data-id="${p.id}">削除</button></td>` : ""}
       </tr>`;
     }).join("");
     return head + rows;
@@ -1562,7 +1688,7 @@ function confirmModal(title, msg, onYes, opts = {}) {
   openModal(`
     <div class="modal-head"><h3>${esc(title)}</h3></div>
     <div class="modal-body"><p class="hint">${esc(msg)}</p>${pinHtml}<div class="form-error" id="c-err"></div></div>
-    <div class="modal-foot"><button class="btn ghost" data-action="close">キャンセル</button><button class="btn danger" id="confirm-yes">${esc(yesLabel)}</button></div>`);
+    <div class="modal-foot"><button class="btn ghost" data-action="close">キャンセル</button><button class="btn ${opts.safe ? "" : "danger"}" id="confirm-yes">${esc(yesLabel)}</button></div>`);
   document.getElementById("confirm-yes").addEventListener("click", async () => {
     const pin = opts.pin ? document.getElementById("c-pin").value : undefined;
     const errEl = document.getElementById("c-err");
@@ -1716,6 +1842,7 @@ const EDITOR_ACTIONS = new Set([
   "new-lot", "edit-lot", "save-lot", "delete-lot",
   "new-loss", "save-loss", "del-loss",
   "new-paint", "save-paint", "finish-kiji", "new-ship", "save-ship",
+  "new-plan", "edit-plan", "save-plan", "delete-plan", "fulfill-plan",
   "new-user", "edit-user", "save-user", "delete-user",
   "export-json", "import-json", "reset", "clear-all",
 ]);
@@ -1753,6 +1880,29 @@ document.body.addEventListener("click", (e) => {
     case "save-paint": savePaint(); break;
     case "new-ship": openShipForm(id, el.dataset.color); break;
     case "save-ship": saveShip(id); break;
+    case "go-shipments": switchView("shipments"); break;
+    case "new-plan": openPlanForm(); break;
+    case "edit-plan": openPlanForm(id); break;
+    case "save-plan": savePlan(id); break;
+    case "delete-plan": {
+      const pl = openPlans().find((x) => x.id === id);
+      const nm = pl ? (productById(pl.productId)?.name || "") : "";
+      confirmModal("出荷予定を取消", `${nm} ×${pl ? pl.qty : ""} → ${pl ? pl.dest : ""} の予定を取り消します。在庫は減りません。`,
+        async () => { const d = await api("delete_shipment_plan", { id }); state = d.state; closeModal(); render(); toast("出荷予定を取り消しました"); },
+        { yesLabel: "取消する" });
+      break;
+    }
+    case "fulfill-plan": {
+      const pl = openPlans().find((x) => x.id === id);
+      if (!pl) break;
+      const nm = productById(pl.productId)?.name || "";
+      confirmModal("出荷を確定", `${nm}（${pl.color || "無色"}）×${pl.qty} を「${pl.dest}」へ出荷済にします。在庫から差し引かれます。`,
+        async () => {
+          const d = await api("fulfill_shipment_plan", { id, shippedDate: todayStr() });
+          state = d.state; closeModal(); render(); toast(`「${pl.dest}」へ出荷しました`);
+        }, { yesLabel: "出荷した", safe: true });
+      break;
+    }
     case "print-paint": {
       const inst = (state.paintInstructions || []).find((x) => x.id === id);
       if (inst) printPaintInstruction(inst);

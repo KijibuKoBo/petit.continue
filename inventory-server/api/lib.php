@@ -91,6 +91,7 @@ function import_backup(PDO $pdo, array $d, array $validStatus, bool $replaceUser
   $pdo->beginTransaction();
   $pdo->exec('DELETE FROM losses');
   $pdo->exec('DELETE FROM paint_instructions');
+  $pdo->exec('DELETE FROM shipment_plans');
   $pdo->exec('DELETE FROM lots');
   $pdo->exec('DELETE FROM products');
   $pdo->exec('DELETE FROM destinations');
@@ -129,8 +130,66 @@ function import_backup(PDO $pdo, array $d, array $validStatus, bool $replaceUser
     $itemsJ = is_array($pi['items'] ?? null) ? json_encode($pi['items'], JSON_UNESCAPED_UNICODE) : '[]';
     $ipi->execute([!empty($pi['id']) ? (string)$pi['id'] : uuid(), $pi['productId'], $pi['kijiLotNo'] ?? '', $pi['kijiDate'] ?? '', $pi['paintDate'] ?? '', $pi['shipBy'] ?? '', $itemsJ, max(0, (int)($pi['totalQty'] ?? 0)), $pi['createdBy'] ?? '', $pi['createdAt'] ?? now()]);
   }
+  $isp = $pdo->prepare('INSERT INTO shipment_plans (id, product_id, color, qty, dest, plan_date, note, status, created_by, created_at, done_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+  foreach (($d['shipmentPlans'] ?? []) as $sp) {
+    if (empty($sp['productId']) || !isset($validIds[$sp['productId']])) continue;
+    $status = ($sp['status'] ?? 'open') === 'done' ? 'done' : 'open';
+    $isp->execute([!empty($sp['id']) ? (string)$sp['id'] : uuid(), $sp['productId'], $sp['color'] ?? '',
+                   max(0, (int)($sp['qty'] ?? 0)), $sp['dest'] ?? '', $sp['planDate'] ?? '', $sp['note'] ?? '',
+                   $status, $sp['createdBy'] ?? '', now(), $sp['doneAt'] ?? null]);
+  }
   foreach (($d['destinations'] ?? []) as $name) ensure_destination((string)$name);
   $pdo->commit();
+}
+
+function map_shipment_plan(array $r): array {
+  return [
+    'id' => $r['id'], 'productId' => $r['product_id'], 'color' => $r['color'] ?? '',
+    'qty' => (int)$r['qty'], 'dest' => $r['dest'] ?? '', 'planDate' => $r['plan_date'] ?? '',
+    'note' => $r['note'] ?? '', 'status' => $r['status'] ?? 'open',
+    'createdBy' => $r['created_by'] ?? '', 'doneAt' => $r['done_at'] ?? '',
+  ];
+}
+
+/* 出荷予定で引き当て済みの数（未消化ぶんのみ）。色を省くと全色の合計。 */
+function reserved_qty(string $pid, ?string $color = null): int {
+  $pdo = db();
+  if ($color === null) {
+    $st = $pdo->prepare("SELECT COALESCE(SUM(qty),0) s FROM shipment_plans WHERE product_id=? AND status='open'");
+    $st->execute([$pid]);
+  } else {
+    $st = $pdo->prepare("SELECT COALESCE(SUM(qty),0) s FROM shipment_plans WHERE product_id=? AND status='open' AND color=?");
+    $st->execute([$pid, $color]);
+  }
+  return (int)$st->fetch()['s'];
+}
+
+/* 完成在庫からカラー別に出荷を引き当てる。ロットを使い切らない場合は分割。 */
+function allocate_shipment(PDO $pdo, string $pid, array $items, string $dest, string $shippedDate, string $note): array {
+  $shipped = [];
+  foreach ($items as $it) {
+    $remaining = (int)$it['qty'];
+    $st = $pdo->prepare("SELECT * FROM lots WHERE product_id=? AND status='painted' AND color=? ORDER BY painted_date ASC, created_at ASC");
+    $st->execute([$pid, $it['color']]);
+    foreach ($st->fetchAll() as $lot) {
+      if ($remaining <= 0) break;
+      $take = min($remaining, (int)$lot['qty']);
+      if ($take >= (int)$lot['qty']) {
+        $pdo->prepare('UPDATE lots SET status=?, dest=?, shipped_date=?, note=?, updated_at=? WHERE id=?')
+            ->execute(['shipped', $dest, $shippedDate, $note !== '' ? $note : $lot['note'], now(), $lot['id']]);
+      } else {
+        $pdo->prepare('UPDATE lots SET qty=?, updated_at=? WHERE id=?')
+            ->execute([(int)$lot['qty'] - $take, now(), $lot['id']]);
+        $pdo->prepare('INSERT INTO lots (id, product_id, lot_no, qty, due_date, status, color, dest, note, kiji_date, painted_date, shipped_date, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+            ->execute([uuid(), $pid, $lot['lot_no'], $take, $lot['due_date'], 'shipped', $lot['color'], $dest,
+                       $note !== '' ? $note : $lot['note'], $lot['kiji_date'], $lot['painted_date'], $shippedDate, now(), now()]);
+      }
+      $remaining -= $take;
+    }
+    if ($remaining > 0) return ['ok' => false];
+    $shipped[] = ($it['color'] !== '' ? $it['color'] : '無色') . '×' . $it['qty'];
+  }
+  return ['ok' => true, 'labels' => $shipped];
 }
 
 function get_state(array $user): array {
@@ -139,12 +198,14 @@ function get_state(array $user): array {
   $lots = array_map('map_lot', $pdo->query('SELECT * FROM lots')->fetchAll());
   $losses = array_map('map_loss', $pdo->query('SELECT * FROM losses ORDER BY loss_date DESC, created_at DESC')->fetchAll());
   $paintInstructions = array_map('map_paint_instruction', $pdo->query('SELECT * FROM paint_instructions ORDER BY created_at DESC LIMIT 500')->fetchAll());
+  $shipmentPlans = array_map('map_shipment_plan', $pdo->query("SELECT * FROM shipment_plans WHERE status='open' ORDER BY plan_date ASC, created_at ASC")->fetchAll());
   $destinations = array_map(fn($r) => $r['name'], $pdo->query('SELECT name FROM destinations ORDER BY name')->fetchAll());
   $users = [];
   if ($user['role'] === 'editor') {
     $users = $pdo->query('SELECT id, email, name, role FROM users ORDER BY created_at')->fetchAll();
   }
-  return ['products' => $products, 'lots' => $lots, 'losses' => $losses, 'paintInstructions' => $paintInstructions, 'destinations' => $destinations, 'users' => $users];
+  return ['products' => $products, 'lots' => $lots, 'losses' => $losses, 'paintInstructions' => $paintInstructions,
+          'shipmentPlans' => $shipmentPlans, 'destinations' => $destinations, 'users' => $users];
 }
 
 /* バケット（kiji/painted）の現在の利用可能在庫 = ロット合計 − 破損合計 */

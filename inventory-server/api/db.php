@@ -118,7 +118,23 @@ function migrate(PDO $pdo): void {
     created_at $dt
   )$eng");
 
+  $pdo->exec("CREATE TABLE IF NOT EXISTS shipment_plans (
+    id VARCHAR(36) PRIMARY KEY,
+    product_id VARCHAR(36) NOT NULL,
+    color VARCHAR(64) DEFAULT '',
+    qty $int NOT NULL DEFAULT 0,
+    dest VARCHAR(255) DEFAULT '',
+    plan_date VARCHAR(10) DEFAULT '',
+    note VARCHAR(255) DEFAULT '',
+    status VARCHAR(16) NOT NULL DEFAULT 'open',
+    created_by VARCHAR(255) DEFAULT '',
+    created_at $dt,
+    done_at $dt
+  )$eng");
+
   foreach ([
+    'CREATE INDEX idx_plans_product ON shipment_plans (product_id)',
+    'CREATE INDEX idx_plans_status ON shipment_plans (status)',
     'CREATE INDEX idx_lots_product ON lots (product_id)',
     'CREATE INDEX idx_lots_status ON lots (status)',
     'CREATE INDEX idx_audit_created ON audit_log (created_at)',

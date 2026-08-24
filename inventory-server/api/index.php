@@ -134,6 +134,7 @@ try {
       $pdo->prepare('DELETE FROM lots WHERE product_id = ?')->execute([$id]);
       $pdo->prepare('DELETE FROM losses WHERE product_id = ?')->execute([$id]);
       $pdo->prepare('DELETE FROM paint_instructions WHERE product_id = ?')->execute([$id]);
+      $pdo->prepare('DELETE FROM shipment_plans WHERE product_id = ?')->execute([$id]);
       $pdo->prepare('DELETE FROM products WHERE id = ?')->execute([$id]);
       $pdo->commit();
       audit($u, 'delete', 'product', $id, '製品を削除: ' . $p['name']);
@@ -310,34 +311,85 @@ case 'delete_lot': {
 
       ensure_destination($dest);
       $pdo->beginTransaction();
-      $shipped = [];
-      foreach ($clean as $it) {
-        $remaining = $it['qty'];
-        /* 古い塗装ロットから順に引き当てる */
-        $st = $pdo->prepare("SELECT * FROM lots WHERE product_id=? AND status='painted' AND color=? ORDER BY painted_date ASC, created_at ASC");
-        $st->execute([$pid, $it['color']]);
-        foreach ($st->fetchAll() as $lot) {
-          if ($remaining <= 0) break;
-          $take = min($remaining, (int)$lot['qty']);
-          if ($take >= (int)$lot['qty']) {
-            /* ロット丸ごと出荷 */
-            $pdo->prepare('UPDATE lots SET status=?, dest=?, shipped_date=?, note=?, updated_at=? WHERE id=?')
-                ->execute(['shipped', $dest, $shippedDate, $note !== '' ? $note : $lot['note'], now(), $lot['id']]);
-          } else {
-            /* 一部だけ出荷：残りを元ロットに残し、出荷分を新ロットとして切り出す */
-            $pdo->prepare('UPDATE lots SET qty=?, updated_at=? WHERE id=?')
-                ->execute([(int)$lot['qty'] - $take, now(), $lot['id']]);
-            $pdo->prepare('INSERT INTO lots (id, product_id, lot_no, qty, due_date, status, color, dest, note, kiji_date, painted_date, shipped_date, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-                ->execute([uuid(), $pid, $lot['lot_no'], $take, $lot['due_date'], 'shipped', $lot['color'], $dest,
-                           $note !== '' ? $note : $lot['note'], $lot['kiji_date'], $lot['painted_date'], $shippedDate, now(), now()]);
-          }
-          $remaining -= $take;
-        }
-        if ($remaining > 0) { $pdo->rollBack(); fail('在庫の引き当てに失敗しました。画面を再読み込みしてお試しください。'); }
-        $shipped[] = ($it['color'] !== '' ? $it['color'] : '無色') . '×' . $it['qty'];
-      }
+      $res = allocate_shipment($pdo, $pid, $clean, $dest, $shippedDate, $note);
+      if (!$res['ok']) { $pdo->rollBack(); fail('在庫の引き当てに失敗しました。画面を再読み込みしてお試しください。'); }
       $pdo->commit();
-      audit($u, 'status', 'lot', $pid, "出荷: {$p['name']} → {$dest} ／ " . implode('、', $shipped) . "（{$shippedDate}）");
+      audit($u, 'status', 'lot', $pid, "出荷: {$p['name']} → {$dest} ／ " . implode('、', $res['labels']) . "（{$shippedDate}）");
+      json_out(['state' => get_state($u)]);
+    }
+
+    /* ── 出荷予定（先に予約しておき、当日「出荷した」に切り替える）── */
+    case 'save_shipment_plan': {
+      $u = require_editor();
+      $b = body();
+      $id = $b['id'] ?? '';
+      $pid = $b['productId'] ?? '';
+      $qty = (int)($b['qty'] ?? 0);
+      $color = trim($b['color'] ?? '');
+      $dest = trim($b['dest'] ?? '');
+      $planDate = trim($b['planDate'] ?? '');
+      $note = trim($b['note'] ?? '');
+      $p = product_by_id($pid);
+      if (!$p) fail('対象の製品が見つかりません。');
+      if ($qty < 1) fail('数量は1以上で入力してください。');
+      if ($dest === '') fail('出荷先を入力してください。');
+      if ($planDate === '') fail('出荷予定日を入力してください。');
+      ensure_destination($dest);
+      $label = $color !== '' ? $color : '無色';
+      if ($id) {
+        $st = $pdo->prepare("SELECT * FROM shipment_plans WHERE id=? AND status='open'");
+        $st->execute([$id]);
+        if (!$st->fetch()) fail('対象の出荷予定が見つかりません。');
+        $pdo->prepare('UPDATE shipment_plans SET product_id=?, color=?, qty=?, dest=?, plan_date=?, note=? WHERE id=?')
+            ->execute([$pid, $color, $qty, $dest, $planDate, $note, $id]);
+        audit($u, 'update', 'plan', $id, "出荷予定を編集: {$p['name']} {$label}×{$qty} → {$dest}（{$planDate}）");
+      } else {
+        $id = uuid();
+        $pdo->prepare('INSERT INTO shipment_plans (id, product_id, color, qty, dest, plan_date, note, status, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
+            ->execute([$id, $pid, $color, $qty, $dest, $planDate, $note, 'open', $u['email'], now()]);
+        audit($u, 'create', 'plan', $id, "出荷予定を追加: {$p['name']} {$label}×{$qty} → {$dest}（{$planDate}）");
+      }
+      json_out(['state' => get_state($u)]);
+    }
+
+    case 'delete_shipment_plan': {
+      $u = require_editor();
+      $id = body()['id'] ?? '';
+      $st = $pdo->prepare('SELECT * FROM shipment_plans WHERE id=?');
+      $st->execute([$id]);
+      $plan = $st->fetch();
+      if (!$plan) fail('対象の出荷予定が見つかりません。');
+      $p = product_by_id($plan['product_id']);
+      $pdo->prepare('DELETE FROM shipment_plans WHERE id=?')->execute([$id]);
+      audit($u, 'delete', 'plan', $id, '出荷予定を取消: ' . ($p['name'] ?? '') . " ×{$plan['qty']} → {$plan['dest']}");
+      json_out(['state' => get_state($u)]);
+    }
+
+    /* 予定を実際の出荷に変える */
+    case 'fulfill_shipment_plan': {
+      $u = require_editor();
+      $b = body();
+      $id = $b['id'] ?? '';
+      $shippedDate = trim($b['shippedDate'] ?? '') ?: date('Y-m-d');
+      $st = $pdo->prepare("SELECT * FROM shipment_plans WHERE id=? AND status='open'");
+      $st->execute([$id]);
+      $plan = $st->fetch();
+      if (!$plan) fail('対象の出荷予定が見つかりません。');
+      $pid = $plan['product_id'];
+      $p = product_by_id($pid);
+      if (!$p) fail('対象の製品が見つかりません。');
+      $color = $plan['color'] ?? '';
+      $qty = (int)$plan['qty'];
+      $label = $color !== '' ? $color : '無色';
+      /* 引き当ては自分の予定ぶんを除いた在庫で判定する */
+      $avail = color_available($pid, $color);
+      if ($qty > $avail) fail("{$label} の在庫は {$avail} です。予定数 {$qty} を出荷できません。");
+      $pdo->beginTransaction();
+      $res = allocate_shipment($pdo, $pid, [['qty' => $qty, 'color' => $color]], $plan['dest'], $shippedDate, $plan['note'] ?? '');
+      if (!$res['ok']) { $pdo->rollBack(); fail('在庫の引き当てに失敗しました。画面を再読み込みしてお試しください。'); }
+      $pdo->prepare("UPDATE shipment_plans SET status='done', done_at=? WHERE id=?")->execute([now(), $id]);
+      $pdo->commit();
+      audit($u, 'status', 'plan', $id, "出荷（予定から）: {$p['name']} {$label}×{$qty} → {$plan['dest']}（{$shippedDate}）");
       json_out(['state' => get_state($u)]);
     }
 
@@ -459,6 +511,7 @@ case 'delete_lot': {
       if ((body()['pin'] ?? '') !== RESET_PIN) fail('パスワードが違います。', 403);
       $pdo->exec('DELETE FROM losses');
       $pdo->exec('DELETE FROM paint_instructions');
+      $pdo->exec('DELETE FROM shipment_plans');
       $pdo->exec('DELETE FROM lots');
       $pdo->exec('DELETE FROM products');
       $pdo->exec('DELETE FROM destinations');
@@ -471,6 +524,7 @@ case 'delete_lot': {
       if ((body()['pin'] ?? '') !== RESET_PIN) fail('パスワードが違います。', 403);
       $pdo->exec('DELETE FROM losses');
       $pdo->exec('DELETE FROM paint_instructions');
+      $pdo->exec('DELETE FROM shipment_plans');
       $pdo->exec('DELETE FROM lots');
       $pdo->exec('DELETE FROM products');
       $pdo->exec('DELETE FROM destinations');
@@ -489,6 +543,7 @@ case 'delete_lot': {
         'lots' => array_map('map_lot', $pdo->query('SELECT * FROM lots')->fetchAll()),
         'losses' => array_map('map_loss', $pdo->query('SELECT * FROM losses ORDER BY loss_date DESC, created_at DESC')->fetchAll()),
         'paintInstructions' => array_map('map_paint_instruction', $pdo->query('SELECT * FROM paint_instructions ORDER BY created_at DESC')->fetchAll()),
+        'shipmentPlans' => array_map('map_shipment_plan', $pdo->query('SELECT * FROM shipment_plans ORDER BY plan_date ASC')->fetchAll()),
         'destinations' => array_map(fn($r) => $r['name'], $pdo->query('SELECT name FROM destinations ORDER BY name')->fetchAll()),
         'users' => array_map(fn($r) => ['id' => $r['id'], 'email' => $r['email'], 'name' => $r['name'], 'role' => $r['role'], 'passHash' => $r['pass_hash'], 'createdAt' => $r['created_at']], $userRows),
       ];

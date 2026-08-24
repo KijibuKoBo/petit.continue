@@ -281,6 +281,66 @@ case 'delete_lot': {
       json_out(['state' => get_state($u), 'instructionId' => $instId]);
     }
 
+    /* ── 出荷：完成在庫からカラー別に必要数だけ出す（部分出荷可）── */
+    case 'ship_lots': {
+      $u = require_editor();
+      $b = body();
+      $pid = $b['productId'] ?? '';
+      $items = $b['items'] ?? [];
+      $dest = trim($b['dest'] ?? '');
+      $shippedDate = trim($b['shippedDate'] ?? '') ?: date('Y-m-d');
+      $note = trim($b['note'] ?? '');
+      $p = product_by_id($pid);
+      if (!$p) fail('対象の製品が見つかりません。');
+      if ($dest === '') fail('出荷先を入力してください。');
+      if (!is_array($items) || count($items) === 0) fail('出荷する数量を入力してください。');
+
+      /* 検証：色ごとの残数を超えていないか（破損分も差し引いた数で判定）*/
+      $clean = [];
+      foreach ($items as $it) {
+        $q = (int)($it['qty'] ?? 0);
+        if ($q < 1) continue;
+        $color = trim($it['color'] ?? '');
+        $avail = color_available($pid, $color);
+        $label = $color !== '' ? $color : '無色';
+        if ($q > $avail) fail("{$label} の在庫は {$avail} です。それを超えて出荷できません。");
+        $clean[] = ['qty' => $q, 'color' => $color];
+      }
+      if (!$clean) fail('出荷する数量を入力してください。');
+
+      ensure_destination($dest);
+      $pdo->beginTransaction();
+      $shipped = [];
+      foreach ($clean as $it) {
+        $remaining = $it['qty'];
+        /* 古い塗装ロットから順に引き当てる */
+        $st = $pdo->prepare("SELECT * FROM lots WHERE product_id=? AND status='painted' AND color=? ORDER BY painted_date ASC, created_at ASC");
+        $st->execute([$pid, $it['color']]);
+        foreach ($st->fetchAll() as $lot) {
+          if ($remaining <= 0) break;
+          $take = min($remaining, (int)$lot['qty']);
+          if ($take >= (int)$lot['qty']) {
+            /* ロット丸ごと出荷 */
+            $pdo->prepare('UPDATE lots SET status=?, dest=?, shipped_date=?, note=?, updated_at=? WHERE id=?')
+                ->execute(['shipped', $dest, $shippedDate, $note !== '' ? $note : $lot['note'], now(), $lot['id']]);
+          } else {
+            /* 一部だけ出荷：残りを元ロットに残し、出荷分を新ロットとして切り出す */
+            $pdo->prepare('UPDATE lots SET qty=?, updated_at=? WHERE id=?')
+                ->execute([(int)$lot['qty'] - $take, now(), $lot['id']]);
+            $pdo->prepare('INSERT INTO lots (id, product_id, lot_no, qty, due_date, status, color, dest, note, kiji_date, painted_date, shipped_date, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                ->execute([uuid(), $pid, $lot['lot_no'], $take, $lot['due_date'], 'shipped', $lot['color'], $dest,
+                           $note !== '' ? $note : $lot['note'], $lot['kiji_date'], $lot['painted_date'], $shippedDate, now(), now()]);
+          }
+          $remaining -= $take;
+        }
+        if ($remaining > 0) { $pdo->rollBack(); fail('在庫の引き当てに失敗しました。画面を再読み込みしてお試しください。'); }
+        $shipped[] = ($it['color'] !== '' ? $it['color'] : '無色') . '×' . $it['qty'];
+      }
+      $pdo->commit();
+      audit($u, 'status', 'lot', $pid, "出荷: {$p['name']} → {$dest} ／ " . implode('、', $shipped) . "（{$shippedDate}）");
+      json_out(['state' => get_state($u)]);
+    }
+
     /* ── 破損・ロス ── */
     case 'record_loss': {
       $u = require_editor();

@@ -163,6 +163,11 @@ td.center, th.center { text-align: center; }
 .paint-row { display: grid; grid-template-columns: 1fr 110px 36px; gap: 10px; align-items: center; margin-bottom: 8px; }
 .paint-row select, .paint-row input { width: 100%; }
 .paint-row .x { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 4px 0; cursor: pointer; color: var(--bad); }
+/* 出荷フォームのカラー別行 */
+.ship-row { display: grid; grid-template-columns: 1fr 110px auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line-soft); }
+.ship-row:last-child { border-bottom: none; }
+.ship-color { font-size: 0.9rem; color: var(--ink); }
+.ship-row input { width: 100%; text-align: right; }
 .paint-sum { font-size: 0.85rem; color: var(--muted); margin-top: 6px; text-align: right; }
 .paint-sum b { color: var(--ink); }
 .paint-sum.over b { color: var(--bad); }
@@ -203,7 +208,7 @@ td.center, th.center { text-align: center; }
 .badge.bad { color: var(--bad); background: var(--bad-bg); }
 .badge.info { color: var(--info); background: var(--info-bg); }
 .badge.neutral { color: var(--muted); background: var(--cream); }
-.chip { display: inline-block; font-size: 0.68rem; padding: 2px 9px; border-radius: 100px; background: var(--cream); color: var(--muted); }
+.chip { display: inline-block; font-size: 0.68rem; padding: 2px 9px; border-radius: 100px; background: var(--cream); color: var(--muted); white-space: nowrap; }
 
 /* ── Forms ── */
 .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -221,6 +226,13 @@ label.field { display: block; font-size: 0.74rem; color: var(--muted); margin-bo
 .empty { text-align: center; padding: 48px 24px; color: var(--muted); }
 .empty-icon { font-size: 2rem; color: var(--gold-light); margin-bottom: 10px; }
 .row-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+/* 横スクロールする表でも操作ボタンが隠れないよう右端に固定 */
+.table-wrap td.row-actions, .table-wrap thead th:last-child {
+  position: sticky; right: 0; z-index: 1;
+  background: var(--warm-white);
+  box-shadow: -10px 0 10px -10px rgba(26, 23, 21, 0.18);
+}
+.table-wrap thead th:last-child { background: var(--cream); }
 
 /* ── Modal ── */
 .modal-overlay { position: fixed; inset: 0; background: rgba(26,23,21,0.42); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
@@ -920,7 +932,7 @@ function renderInventory() {
         <td class="num muted">${num(plannedQty(p.id))}</td>
         <td class="center"><span class="badge ${st.key}">${st.label}</span></td>
         <td class="center"><button class="btn sm ghost" data-action="product-detail" data-id="${p.id}">明細</button></td>
-        ${canEdit ? `<td class="row-actions">${kQty > 0 ? `<button class="btn sm ghost" data-action="new-paint" data-id="${p.id}" title="木地在庫を塗装する">塗装</button>` : ""}<button class="btn sm ghost" data-action="edit-product" data-id="${p.id}">編集</button><button class="btn sm ghost danger" data-action="delete-product" data-id="${p.id}">削除</button></td>` : ""}
+        ${canEdit ? `<td class="row-actions">${kQty > 0 ? `<button class="btn sm ghost" data-action="new-paint" data-id="${p.id}" title="木地在庫を塗装する">塗装</button>` : ""}${fQty > 0 ? `<button class="btn sm ghost" data-action="new-ship" data-id="${p.id}" title="在庫から出荷する">出荷</button>` : ""}<button class="btn sm ghost" data-action="edit-product" data-id="${p.id}">編集</button><button class="btn sm ghost danger" data-action="delete-product" data-id="${p.id}">削除</button></td>` : ""}
       </tr>`;
     }).join("");
     return head + rows;
@@ -1262,7 +1274,7 @@ function openProductDetail(pid) {
             : '<span class="muted">—</span>');
       const stageBtn = canEditLot
         ? (l.status === "kiji" ? `<button class="btn sm" data-action="new-paint" data-id="${pid}" data-lot="${l.id}" title="このロットを塗装する">塗装</button>`
-           : l.status === "painted" ? `<button class="btn sm" data-action="new-ship" data-id="${l.id}" title="このロットを出荷する">出荷</button>`
+           : l.status === "painted" ? `<button class="btn sm" data-action="new-ship" data-id="${pid}" data-color="${esc(l.color || "")}" title="このカラーを出荷する">出荷</button>`
            : "")
         : "";
       return `<tr>
@@ -1318,7 +1330,7 @@ function openProductDetail(pid) {
   modalEl.innerHTML = `
     <div class="modal-head"><h3>${esc(p.name)}</h3><p>ロット番号ごとの明細（完成予定日の新しい順）</p></div>
     <div class="modal-body">${meta}${cadence}${table}${instTable}${lossTable}</div>
-    <div class="modal-foot">${isEditor() ? `<button class="btn ghost danger" data-action="new-loss" data-id="${pid}">破損で減らす</button><button class="btn ghost" data-action="new-lot" data-pid="${pid}">＋ 生産予定を追加</button>` : ""}<button class="btn" data-action="close">閉じる</button></div>`;
+    <div class="modal-foot">${isEditor() ? `<button class="btn ghost danger" data-action="new-loss" data-id="${pid}">破損で減らす</button>${finishedStock(pid) > 0 ? `<button class="btn ghost" data-action="new-ship" data-id="${pid}">出荷する</button>` : ""}<button class="btn ghost" data-action="new-lot" data-pid="${pid}">＋ 生産予定を追加</button>` : ""}<button class="btn" data-action="close">閉じる</button></div>`;
   modalEl.style.maxWidth = "860px";
   overlay.classList.add("open");
 }
@@ -1703,7 +1715,7 @@ const EDITOR_ACTIONS = new Set([
   "new-product", "edit-product", "save-product", "delete-product",
   "new-lot", "edit-lot", "save-lot", "delete-lot",
   "new-loss", "save-loss", "del-loss",
-  "new-paint", "save-paint", "finish-kiji", "new-ship",
+  "new-paint", "save-paint", "finish-kiji", "new-ship", "save-ship",
   "new-user", "edit-user", "save-user", "delete-user",
   "export-json", "import-json", "reset", "clear-all",
 ]);
@@ -1739,7 +1751,8 @@ document.body.addEventListener("click", (e) => {
     case "save-loss": saveLoss(id); break;
     case "new-paint": openPaintForm(id, el.dataset.lot); break;
     case "save-paint": savePaint(); break;
-    case "new-ship": promptShip(id); break;
+    case "new-ship": openShipForm(id, el.dataset.color); break;
+    case "save-ship": saveShip(id); break;
     case "print-paint": {
       const inst = (state.paintInstructions || []).find((x) => x.id === id);
       if (inst) printPaintInstruction(inst);
@@ -1791,39 +1804,66 @@ document.body.addEventListener("click", (e) => {
 });
 
 /* 出荷情報プロンプト（status='shipped'専用） */
-function promptShip(lotId) {
-  const l = state.lots.find((x) => x.id === lotId);
-  if (!l) return;
-  const p = productById(l.productId);
-  const colorRow = l.color
-    ? `<div class="field-group"><label class="field">カラー</label><div><span class="chip">${esc(l.color)}</span></div></div>`
-    : `<div class="field-group"><label class="field">カラー（任意）</label><select id="ps-color">${colorOptions("")}</select></div>`;
+/* 出荷フォーム：完成在庫からカラー別に必要数だけ出す（部分出荷可） */
+function openShipForm(pid, prefillColor) {
+  const p = productById(pid);
+  if (!p) return;
+  const stock = finishedByColor(pid);
+  const colors = Object.keys(stock);
+  if (!colors.length) { toast("出荷できる在庫がありません", true); return; }
   openModal(`
-    <div class="modal-head"><h3>出荷情報を入力</h3><p>${esc(p ? p.name : "")}${l.lotNo ? "（" + esc(l.lotNo) + "）" : ""} ×${num(l.qty)} を出荷済にします。</p></div>
+    <div class="modal-head"><h3>出荷する：${esc(p.name)}</h3><p>在庫（完成）からカラー別に出荷数を入れてください。全部でなくても構いません。</p></div>
     <div class="modal-body">
       <div class="field-row">
-        <div class="field-group"><label class="field">出荷日 *</label><input type="date" id="ps-date" value="${todayStr()}"></div>
-        <div class="field-group"><label class="field">出荷先 *</label><input type="text" id="ps-dest" list="dest-options" value="${esc(l.dest || "")}" placeholder="出荷先名（マスタ自動追加）" autofocus>${destDatalist()}</div>
+        <div class="field-group"><label class="field">出荷日 *</label><input type="date" id="sh-date" value="${todayStr()}"></div>
+        <div class="field-group"><label class="field">出荷先 *</label><input type="text" id="sh-dest" list="dest-options" placeholder="出荷先名（入力すると次回から候補に出ます）">${destDatalist()}</div>
       </div>
-      ${colorRow}
-      <div class="form-error" id="ps-err"></div>
+      <div style="margin-top:10px;"><label class="field">出荷する数量（カラー別）</label></div>
+      <div id="sh-rows">
+        ${colors.map((c) => {
+          const v = c === "（無）" ? "" : c;
+          const pre = prefillColor !== undefined && (prefillColor || "（無）") === c ? stock[c] : "";
+          return `<div class="ship-row" data-color="${esc(v)}">
+            <span class="ship-color">${esc(c)}<span class="muted">　残 ${num(stock[c])}</span></span>
+            <input type="number" class="sh-qty" min="0" max="${stock[c]}" step="1" value="${pre}" placeholder="0">
+            <button type="button" class="btn sm ghost sh-all">全部</button>
+          </div>`;
+        }).join("")}
+      </div>
+      <div class="field-group" style="margin-top:14px;"><label class="field">メモ（任意）</label><input type="text" id="sh-note" placeholder="例：便名・注文番号など"></div>
+      <div class="paint-sum" id="sh-sum"></div>
+      <div class="form-error" id="sh-err"></div>
     </div>
-    <div class="modal-foot"><button class="btn ghost" data-action="close">キャンセル</button><button class="btn" id="ps-save">出荷済にする</button></div>`);
-  document.getElementById("ps-save").addEventListener("click", async () => {
-    const dest = document.getElementById("ps-dest").value.trim();
-    const shippedDate = document.getElementById("ps-date").value;
-    const colorEl = document.getElementById("ps-color");
-    const color = colorEl ? colorEl.value : undefined;
-    const err = document.getElementById("ps-err");
-    if (!dest) { err.textContent = "出荷先を入力してください。"; return; }
-    if (!shippedDate) { err.textContent = "出荷日を入力してください。"; return; }
-    const payload = { id: lotId, status: "shipped", dest, shippedDate };
-    if (color !== undefined) payload.color = color;
-    try {
-      const d = await api("set_status", payload);
-      state = d.state; closeModal(); reopenDetailOrRender(); toast("「" + dest + "」へ出荷済にしました");
-    } catch (e) { err.textContent = e.message; }
+    <div class="modal-foot"><button class="btn ghost" data-action="close">キャンセル</button><button class="btn" data-action="save-ship" data-id="${pid}">出荷を登録</button></div>`);
+  const sumEl = document.getElementById("sh-sum");
+  function updateSum() {
+    const total = [...document.querySelectorAll("#sh-rows .sh-qty")].reduce((s, i) => s + (parseInt(i.value, 10) || 0), 0);
+    sumEl.innerHTML = `出荷 合計 <b>${num(total)}</b> 点`;
+  }
+  document.querySelectorAll("#sh-rows .ship-row").forEach((row) => {
+    const inp = row.querySelector(".sh-qty");
+    inp.addEventListener("input", updateSum);
+    row.querySelector(".sh-all").addEventListener("click", () => { inp.value = inp.max; updateSum(); });
   });
+  updateSum();
+}
+async function saveShip(pid) {
+  const dest = document.getElementById("sh-dest").value.trim();
+  const shippedDate = document.getElementById("sh-date").value;
+  const note = document.getElementById("sh-note").value.trim();
+  const items = [...document.querySelectorAll("#sh-rows .ship-row")].map((r) => ({
+    color: r.dataset.color,
+    qty: parseInt(r.querySelector(".sh-qty").value, 10) || 0,
+  })).filter((i) => i.qty > 0);
+  const err = document.getElementById("sh-err");
+  if (!dest) { err.textContent = "出荷先を入力してください。"; return; }
+  if (!shippedDate) { err.textContent = "出荷日を入力してください。"; return; }
+  if (!items.length) { err.textContent = "出荷する数量を入力してください。"; return; }
+  try {
+    const d = await api("ship_lots", { productId: pid, items, dest, shippedDate, note });
+    state = d.state; closeModal(); reopenDetailOrRender();
+    toast(`「${dest}」へ出荷：` + items.map((i) => (i.color || "無色") + "×" + i.qty).join("、"));
+  } catch (e) { err.textContent = e.message; }
 }
 
 document.getElementById("import-file").addEventListener("change", (e) => { if (e.target.files[0]) importJSON(e.target.files[0]); e.target.value = ""; });
